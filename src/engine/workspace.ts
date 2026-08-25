@@ -1,6 +1,3 @@
-const RUFF_VERSION = "0.16.4";
-const CDN_URL = `https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@${RUFF_VERSION}/ruff_wasm.js`;
-
 export interface Diagnostic {
   code: string | null;
   message: string;
@@ -22,22 +19,31 @@ interface RuffWasmModule {
   PositionEncoding: { Utf16: number };
 }
 
-let workspacePromise: Promise<{ check(contents: string): Diagnostic[] }> | null = null;
+const workspaceCache = new Map<
+  string,
+  Promise<{ check(contents: string): Diagnostic[]; format?(contents: string): string }>
+>();
 
-async function loadWorkspace() {
-  const mod = (await import(/* @vite-ignore */ CDN_URL)) as RuffWasmModule;
+async function loadWorkspace(wasmUrl: string) {
+  const mod = (await import(/* @vite-ignore */ wasmUrl)) as RuffWasmModule;
   await mod.default();
   return new mod.Workspace({}, mod.PositionEncoding.Utf16);
 }
 
-function getWorkspace() {
+function getWorkspace(version: string, wasmUrl: string) {
+  let workspacePromise = workspaceCache.get(version);
   if (!workspacePromise) {
-    workspacePromise = loadWorkspace();
+    workspacePromise = loadWorkspace(wasmUrl);
+    workspaceCache.set(version, workspacePromise);
   }
   return workspacePromise;
 }
 
-export async function checkCode(code: string): Promise<Diagnostic[]> {
-  const workspace = await getWorkspace();
+export async function checkCode(
+  code: string,
+  version: string,
+  wasmUrl: string,
+): Promise<Diagnostic[]> {
+  const workspace = await getWorkspace(version, wasmUrl);
   return workspace.check(code);
 }

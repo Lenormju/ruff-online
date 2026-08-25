@@ -1,0 +1,7 @@
+[
+  {
+    "version": "0.16.4",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.16.4/ruff_wasm.js",
+    "rulesPath": "versions/0.16.4/rules.json"
+  }
+]

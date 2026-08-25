@@ -44,6 +44,9 @@
         font-family: ui-monospace, monospace;
         font-size: 0.85rem;
       }
+      #version-select {
+        margin-right: 0.5rem;
+      }
     </style>
   </head>
   <body>
@@ -51,14 +54,17 @@
     <p>Paste Python code and click Run to lint it with Ruff, entirely in your browser.</p>
 
     <div id="editor-container"></div>
-    <p><button id="run-button">Run</button></p>
+    <p>
+      <select id="version-select"></select>
+      <button id="run-button">Run</button>
+    </p>
 
     <ul id="results"></ul>
     <div id="error-banner"></div>
 
     <p><em>
-      Phase 1: CodeMirror editor with click-to-jump. Still missing:
-      multi-version, config, formatting, sharing.
+      Phase 2: Multi-version support. Still missing: config, formatting,
+      sharing.
     </em></p>
 
     <script type="module" src="/src/main.ts"></script>
