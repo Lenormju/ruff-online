@@ -1,17 +1,21 @@
-import { checkCode, SYNTAX_ERROR_CODE } from "./engine/workspace";
+import { checkCode, formatCode, SYNTAX_ERROR_CODE } from "./engine/workspace";
 import { getLatestVersion, getVersions, type VersionEntry } from "./engine/versions";
-import { createPythonEditor } from "./editor/python-editor";
+import { createPythonEditor, replaceContent } from "./editor/python-editor";
 import { createTomlEditor } from "./editor/toml-editor";
 import { tomlToOptions } from "./config/toml-options";
 import { formatDiagnostic, renderDiagnostics } from "./ui/diagnostics-panel";
+import { renderDiff } from "./ui/diff-view";
 
 const editorContainer = document.querySelector<HTMLDivElement>("#editor-container")!;
 const tomlContainer = document.querySelector<HTMLDivElement>("#toml-container")!;
 const runButton = document.querySelector<HTMLButtonElement>("#run-button")!;
+const formatButton = document.querySelector<HTMLButtonElement>("#format-button")!;
+const applyButton = document.querySelector<HTMLButtonElement>("#apply-button")!;
 const versionSelect = document.querySelector<HTMLSelectElement>("#version-select")!;
 const configStatus = document.querySelector<HTMLDivElement>("#config-status")!;
 const resultsList = document.querySelector<HTMLUListElement>("#results")!;
 const errorBanner = document.querySelector<HTMLDivElement>("#error-banner")!;
+const diffView = document.querySelector<HTMLDivElement>("#diff-view")!;
 
 const editor = createPythonEditor(editorContainer, "import os");
 // An empty [tool.ruff] table means Ruff's defaults — nothing is silently
@@ -23,6 +27,7 @@ const tomlEditor = createTomlEditor(
 
 let versions: VersionEntry[] = [];
 let currentEntry: VersionEntry | null = null;
+let pendingFormattedCode: string | null = null;
 
 async function initVersions() {
   versions = await getVersions();
@@ -56,6 +61,12 @@ function clearConfigStatus() {
   configStatus.style.display = "none";
   configStatus.textContent = "";
   configStatus.classList.remove("parse-error");
+}
+
+function clearDiff() {
+  diffView.replaceChildren();
+  pendingFormattedCode = null;
+  applyButton.style.display = "none";
 }
 
 function showResults(diagnostics: Awaited<ReturnType<typeof checkCode>>) {
@@ -113,6 +124,52 @@ async function run() {
   }
 }
 
+async function format() {
+  clearOutput();
+  clearConfigStatus();
+  clearDiff();
+
+  const result = tomlToOptions(tomlEditor.state.doc.toString());
+  if (!result.ok) {
+    showConfigParseError(result.message);
+    return;
+  }
+
+  if (!currentEntry) {
+    showError("No Ruff version selected yet.");
+    return;
+  }
+
+  const currentCode = editor.state.doc.toString();
+  try {
+    const formatted = await formatCode(
+      currentCode,
+      currentEntry.version,
+      currentEntry.wasmUrl,
+      result.options,
+    );
+    renderDiff(diffView, currentCode, formatted);
+    if (formatted !== currentCode) {
+      pendingFormattedCode = formatted;
+      applyButton.style.display = "inline";
+    }
+  } catch (error) {
+    // Ruff's formatter throws on code it can't parse — same red-banner path
+    // as any other Ruff failure, not a broken/empty diff.
+    showError(error);
+  }
+}
+
 runButton.addEventListener("click", () => {
   void run();
+});
+
+formatButton.addEventListener("click", () => {
+  void format();
+});
+
+applyButton.addEventListener("click", () => {
+  if (pendingFormattedCode === null) return;
+  replaceContent(editor, pendingFormattedCode);
+  clearDiff();
 });

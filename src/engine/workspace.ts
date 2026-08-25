@@ -15,6 +15,7 @@ export const SYNTAX_ERROR_CODE = "invalid-syntax";
 
 interface RuffWorkspace {
   check(contents: string): Diagnostic[];
+  format(contents: string): string;
 }
 
 interface RuffWasmModule {
@@ -85,4 +86,19 @@ export async function checkCode(
 ): Promise<Diagnostic[]> {
   const workspace = await getWorkspace(version, wasmUrl, options);
   return workspace.check(code);
+}
+
+/**
+ * Unlike `checkCode`, a syntax error here is a thrown exception (Ruff's
+ * formatter can't produce output for code it can't parse) — same red-banner
+ * path as any other Ruff failure, not a diagnostic in a list.
+ */
+export async function formatCode(
+  code: string,
+  version: string,
+  wasmUrl: string,
+  options: RuffOptions,
+): Promise<string> {
+  const workspace = await getWorkspace(version, wasmUrl, options);
+  return workspace.format(code);
 }

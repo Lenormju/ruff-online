@@ -73,6 +73,29 @@
         border: 1px solid #d9a300;
         color: #7a5600;
       }
+      #diff-view {
+        font-family: ui-monospace, monospace;
+        font-size: 0.85rem;
+        white-space: pre;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 0.5rem 0.75rem;
+        overflow-x: auto;
+      }
+      #diff-view:empty {
+        display: none;
+      }
+      .diff-delete {
+        background: #fee;
+        color: #900;
+      }
+      .diff-insert {
+        background: #efe;
+        color: #262;
+      }
+      #apply-button {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -83,6 +106,8 @@
     <p>
       <select id="version-select"></select>
       <button id="run-button">Run</button>
+      <button id="format-button">Format</button>
+      <button id="apply-button">Apply</button>
     </p>
 
     <h2>Configuration</h2>
@@ -97,8 +122,11 @@
     <ul id="results"></ul>
     <div id="error-banner"></div>
 
+    <h2>Format diff</h2>
+    <div id="diff-view"></div>
+
     <p><em>
-      Phase 3: Raw TOML config mode. Still missing: formatting, sharing.
+      Phase 4: Format diff + Apply. Still missing: sharing, Visual/CLI modes.
     </em></p>
 
     <script type="module" src="/src/main.ts"></script>
