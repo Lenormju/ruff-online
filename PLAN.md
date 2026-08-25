@@ -193,9 +193,12 @@ into `Workspace` construction, replacing Phase 0's hardcoded defaults.
 
 **Critical files**: `src/editor/toml-editor.ts`, `src/config/toml-options.ts`.
 
-**Verification**: paste `[tool.ruff]\nline-length = 20`, Apply, run Check
-against a long line, confirm `E501`. Paste malformed TOML, confirm a clear
-parse-error message (distinct from a Ruff diagnostic or a Ruff exception).
+**Verification**: paste `[tool.ruff]\nline-length = 20\n\n[tool.ruff.lint]\nselect = ["E", "F"]`,
+Apply, run Check against a long line, confirm `E501` (Ruff's default
+`lint.select` — `E4,E7,E9,F` — excludes `E5`, so `line-length` alone has no
+observable effect; `select` must include `E`/`E501` to exercise it). Paste
+malformed TOML, confirm a clear parse-error message (distinct from a Ruff
+diagnostic or a Ruff exception).
 
 ---
 

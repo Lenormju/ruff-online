@@ -11,13 +11,17 @@
         margin: 2rem auto;
         padding: 0 1rem;
       }
-      #editor-container {
+      #editor-container,
+      #toml-container {
         border: 1px solid #ccc;
       }
       #editor-container .cm-editor {
         height: 16rem;
       }
-      #editor-container .cm-scroller {
+      #toml-container .cm-editor {
+        height: 8rem;
+      }
+      .cm-scroller {
         font-family: ui-monospace, monospace;
         font-size: 0.9rem;
       }
@@ -47,6 +51,28 @@
       #version-select {
         margin-right: 0.5rem;
       }
+      /*
+       * Deliberately NOT the red #error-banner styling: a TOML syntax error is
+       * a third, distinct kind of failure — the config never reached Ruff, and
+       * the previously applied config is still active.
+       */
+      #config-status {
+        display: none;
+        padding: 0.5rem 0.75rem;
+        border-radius: 4px;
+        margin-top: 0.5rem;
+        white-space: pre-wrap;
+        font-family: ui-monospace, monospace;
+        font-size: 0.85rem;
+        background: #eef6ee;
+        border: 1px solid #7a7;
+        color: #262;
+      }
+      #config-status.parse-error {
+        background: #fff8e0;
+        border: 1px solid #d9a300;
+        color: #7a5600;
+      }
     </style>
   </head>
   <body>
@@ -59,12 +85,21 @@
       <button id="run-button">Run</button>
     </p>
 
+    <h2>Configuration</h2>
+    <p>
+      Ruff config in <code>pyproject.toml</code> form. Nothing is applied while
+      you type — click Apply to use it for the next Run.
+    </p>
+    <div id="toml-container"></div>
+    <p><button id="apply-config-button">Apply</button></p>
+    <div id="config-status"></div>
+
+    <h2>Results</h2>
     <ul id="results"></ul>
     <div id="error-banner"></div>
 
     <p><em>
-      Phase 2: Multi-version support. Still missing: config, formatting,
-      sharing.
+      Phase 3: Raw TOML config mode. Still missing: formatting, sharing.
     </em></p>
 
     <script type="module" src="/src/main.ts"></script>
