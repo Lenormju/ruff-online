@@ -359,6 +359,22 @@ in addition to the list entry.
 
 ---
 
+## Phase 11 — Polished README + In-App Help
+
+**Adds**: a proper `README.md` (GitHub repo link, badge/link to the live
+site, current supported Ruff version, brief feature overview, screenshot),
+plus a small in-app help notice on the page itself (what this tool is, link
+back to the GitHub repo, current Ruff version in use).
+
+**Critical files**: `README.md`, `src/ui/help-notice.ts` (or equivalent
+small UI element).
+
+**Verification**: README renders correctly on GitHub with working links;
+the deployed page shows the help notice with a correct, live GitHub link
+and the current Ruff version.
+
+---
+
 ## Summary Table
 
 | Phase | Adds | Still missing after |
@@ -374,6 +390,7 @@ in addition to the list entry.
 | 8 | CLI flags mode | plugins, squiggles |
 | 9 | Visual Tier 4 (plugins) | squiggles |
 | 10 | Inline squiggles | (feature-complete per current spec) |
+| 11 | README + in-app help notice | — |
 
 ---
 
