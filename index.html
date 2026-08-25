@@ -53,8 +53,8 @@
       }
       /*
        * Deliberately NOT the red #error-banner styling: a TOML syntax error is
-       * a third, distinct kind of failure — the config never reached Ruff, and
-       * the previously applied config is still active.
+       * a third, distinct kind of failure — the config never reached Ruff, so
+       * Run doesn't happen at all.
        */
       #config-status {
         display: none;
@@ -87,11 +87,10 @@
 
     <h2>Configuration</h2>
     <p>
-      Ruff config in <code>pyproject.toml</code> form. Nothing is applied while
-      you type — click Apply to use it for the next Run.
+      Ruff config in <code>pyproject.toml</code> form. Used automatically
+      whenever you click Run.
     </p>
     <div id="toml-container"></div>
-    <p><button id="apply-config-button">Apply</button></p>
     <div id="config-status"></div>
 
     <h2>Results</h2>

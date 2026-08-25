@@ -187,18 +187,20 @@ confirm reload happens and a previously-used version loads instantly
 mode-switch machinery needed yet since it's the only mode.
 
 **Adds**: CodeMirror TOML editor (`@codemirror/legacy-modes`), `smol-toml`
-for parsing. Textarea → `Options` on explicit "Apply" (not live
-per-keystroke, consistent with the consent rule). `Options` fed straight
-into `Workspace` construction, replacing Phase 0's hardcoded defaults.
+for parsing. Textarea → `Options` parsed fresh on every explicit "Run" click
+(not live per-keystroke, consistent with the consent rule) — no separate
+"Apply"/staging step; whatever TOML is in the editor at the moment Run is
+clicked is what's used. `Options` fed straight into `Workspace` construction,
+replacing Phase 0's hardcoded defaults.
 
 **Critical files**: `src/editor/toml-editor.ts`, `src/config/toml-options.ts`.
 
 **Verification**: paste `[tool.ruff]\nline-length = 20\n\n[tool.ruff.lint]\nselect = ["E", "F"]`,
-Apply, run Check against a long line, confirm `E501` (Ruff's default
+run Check against a long line, confirm `E501` (Ruff's default
 `lint.select` — `E4,E7,E9,F` — excludes `E5`, so `line-length` alone has no
 observable effect; `select` must include `E`/`E501` to exercise it). Paste
-malformed TOML, confirm a clear parse-error message (distinct from a Ruff
-diagnostic or a Ruff exception).
+malformed TOML and click Run, confirm a clear parse-error message (distinct
+from a Ruff diagnostic or a Ruff exception) and that Ruff is not invoked.
 
 ---
 
