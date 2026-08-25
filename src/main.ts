@@ -1,20 +1,18 @@
 import { checkCode, SYNTAX_ERROR_CODE } from "./engine/workspace";
+import { createPythonEditor } from "./editor/python-editor";
+import { formatDiagnostic, renderDiagnostics } from "./ui/diagnostics-panel";
 
-const codeInput = document.querySelector<HTMLTextAreaElement>("#code-input")!;
+const editorContainer = document.querySelector<HTMLDivElement>("#editor-container")!;
 const runButton = document.querySelector<HTMLButtonElement>("#run-button")!;
 const resultsList = document.querySelector<HTMLUListElement>("#results")!;
 const errorBanner = document.querySelector<HTMLDivElement>("#error-banner")!;
+
+const editor = createPythonEditor(editorContainer, "import os");
 
 function clearOutput() {
   resultsList.replaceChildren();
   errorBanner.style.display = "none";
   errorBanner.textContent = "";
-}
-
-function formatDiagnostic(diagnostic: Awaited<ReturnType<typeof checkCode>>[number]) {
-  const { row, column } = diagnostic.start_location;
-  const code = diagnostic.code ?? "?";
-  return `${code} — ${diagnostic.message} (${row}:${column})`;
 }
 
 function showResults(diagnostics: Awaited<ReturnType<typeof checkCode>>) {
@@ -24,17 +22,7 @@ function showResults(diagnostics: Awaited<ReturnType<typeof checkCode>>) {
     return;
   }
 
-  if (diagnostics.length === 0) {
-    const item = document.createElement("li");
-    item.textContent = "No issues found.";
-    resultsList.append(item);
-    return;
-  }
-  for (const diagnostic of diagnostics) {
-    const item = document.createElement("li");
-    item.textContent = formatDiagnostic(diagnostic);
-    resultsList.append(item);
-  }
+  renderDiagnostics(resultsList, diagnostics, editor);
 }
 
 function showError(error: unknown) {
@@ -45,7 +33,7 @@ function showError(error: unknown) {
 async function run() {
   clearOutput();
   try {
-    const diagnostics = await checkCode(codeInput.value);
+    const diagnostics = await checkCode(editor.state.doc.toString());
     showResults(diagnostics);
   } catch (error) {
     showError(error);

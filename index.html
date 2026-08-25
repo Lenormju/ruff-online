@@ -11,17 +11,26 @@
         margin: 2rem auto;
         padding: 0 1rem;
       }
-      textarea {
-        width: 100%;
+      #editor-container {
+        border: 1px solid #ccc;
+      }
+      #editor-container .cm-editor {
         height: 16rem;
+      }
+      #editor-container .cm-scroller {
         font-family: ui-monospace, monospace;
         font-size: 0.9rem;
-        box-sizing: border-box;
       }
       #results {
         font-family: ui-monospace, monospace;
         font-size: 0.9rem;
         padding-left: 1.25rem;
+      }
+      #results li.diagnostic {
+        cursor: pointer;
+      }
+      #results li.diagnostic:hover {
+        text-decoration: underline;
       }
       #error-banner {
         display: none;
@@ -41,15 +50,15 @@
     <h1>Ruff Online</h1>
     <p>Paste Python code and click Run to lint it with Ruff, entirely in your browser.</p>
 
-    <textarea id="code-input" spellcheck="false">import os</textarea>
+    <div id="editor-container"></div>
     <p><button id="run-button">Run</button></p>
 
     <ul id="results"></ul>
     <div id="error-banner"></div>
 
     <p><em>
-      Walking skeleton (Phase 0): one hardcoded Ruff version, check only, no
-      formatting, no config, no version picker, no sharing yet.
+      Phase 1: CodeMirror editor with click-to-jump. Still missing:
+      multi-version, config, formatting, sharing.
     </em></p>
 
     <script type="module" src="/src/main.ts"></script>
