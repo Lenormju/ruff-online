@@ -610,24 +610,115 @@ browser context.
 
 ## Phase 9 — Visual Mode, Tier 4: Plugin Fine-Tuning
 
-**Adds**: progressive disclosure — a plugin's panel (isort, pep8-naming,
-pylint, flake8-pytest-style, etc., ~130 fields across ~25 namespaces) only
-renders once its Tier 2 category has at least one rule enabled. Build
-incrementally by plugin, each as its own verified sub-step, not all at
-once. `Options` schema extends to cover these fields in
-`ruffOptionsToVisualOptions`/`visualOptionsToRuffOptions` — this is what
-closes Visual's remaining gap with Code (Phase 8 already gives Code full
-`RuffOptions` coverage via TOML + CLI's native flags/`--config` escape
-hatch, so no CLI-side work is needed here; Phase 9 is purely about Visual
-catching up, not about extending the Code facet).
+**Status: done**, commit pending. Closes Visual's remaining gap with Code
+(Phase 8 already gave Code full `RuffOptions` coverage via TOML + CLI; this
+phase is purely about Visual catching up).
 
-**Critical files**: `src/config/options.ts` (extended), one file per plugin
-under `src/ui/tier4-panels/`, or a schema-driven generic form if field
-shapes prove regular enough to justify it.
+Before writing any code, the real `ruff.schema.json` (astral-sh/ruff, main
+branch — same source used for Tier 1/3 in Phase 6) was fetched and every
+plugin option audited field-by-field, rather than guessing. Findings: 27
+plugin namespaces, **119 fields total** (close to this section's original
+"~130" estimate), and the field shapes are extremely regular — boolean,
+integer, plain string, a small string enum, or `array<string>` (Ruff's
+`Name`/`NameImports`/`Alias`/`BannedAliases`/`ConstantType` schema refs are
+themselves just strings under the hood). Only 8 fields are genuinely
+different: 6 are string-keyed maps (`flake8-import-conventions.
+{aliases,extend-aliases,banned-aliases}`, `flake8-tidy-imports.banned-api`,
+`isort.{import-heading,sections}`), and 2 are a real discriminated union
+(`flake8-tidy-imports.{ban-lazy,require-lazy}`, Ruff's `ImportSelector` —
+either the literal `"all"`, a bare include list, or `{include, exclude}`).
+This regularity is exactly the condition this section's original text
+flagged as justifying "a schema-driven generic form" over ~25 hand-written
+panel files — so that's what got built, and after review **all 119 fields
+are covered**, not just the ~111 pure-scalar ones (see below).
 
-**Verification**: one concrete example per plugin (e.g. set
-`isort.known-first-party`, confirm Format output's import ordering
-changes).
+**`src/config/tier4-schema.ts`** — one static, transcribed-from-the-real-
+schema data table, `TIER4_SCHEMA: Tier4PluginSpec[]`, each entry a plugin's
+TOML key (e.g. `"isort"`), display label, `categoryKey` (the matching
+`rules.json` `linter` value — **explicit per plugin, not derived**: three
+plugin TOML keys don't match their `linter` string verbatim, confirmed
+empirically — `pylint` → `"Pylint"`, `pyflakes` → `"Pyflakes"`, `ruff` →
+`"Ruff-specific rules"`), and a `fields: Tier4FieldSpec[]` list. Eight field
+`kind`s cover every real field with no per-plugin bespoke code: `boolean`,
+`integer`, `string`, `enum`, `stringArray`, `record` (`Record<string,
+string>`; an optional `wrapKey` wraps/unwraps each value as `{[wrapKey]:
+value}` — only `banned-api`'s real `{msg: string}` shape needs this),
+`recordArray` (`Record<string, string[]>`), and `importSelector` (the one
+genuine union, modeled as `{include: "all" | string[], exclude?: string[]}`
+and serialized to whichever of the three real shapes is shortest — bare
+`"all"`/array when `exclude` is empty, the full object otherwise).
+
+**`src/config/options.ts` extended**: `Tier4Options` is `Record<pluginKey,
+Record<fieldKey, Tier4Value>>` using Ruff's own kebab-case keys directly —
+a deliberate departure from Tier 1/3's hand-declared camelCase `FieldSpec`
+maps, since `TIER4_SCHEMA` is already the single source of truth for 119
+field names and a second naming layer would add nothing but boilerplate.
+`tier4ToRuffLint`/the `extractLintTables` reverse path (replacing the old
+`extractLintSelectors`) build/parse `[tool.ruff.lint.<plugin>]` tables
+alongside Tier 2's existing `select`/`ignore`/`extend-select`, sharing the
+same `extraKeys` mechanism as Tier 1/3 for anything malformed or
+unrecognized — so an unsupported TOML config still correctly triggers
+Code→Visual's discard warning, no new mechanism needed.
+
+**Progressive disclosure**: `isRuleEffectivelyOn` (rule-code → boolean,
+using `categorySelected`/`ruleOverrides`/`rule.enabled`) was extracted from
+`tier2-panel.ts`'s private closure into an exported pure function in
+`rule-reconciliation.ts` — behavior-preserving refactor, `tier2-panel.ts`
+now calls it too. A Tier 4 plugin panel is visible iff any rule in its
+`categoryKey` category is effectively on. **`src/ui/tier4-panel.ts`** is one
+generic renderer (not one file per plugin) driven entirely by
+`TIER4_SCHEMA`: every plugin's `<details>` is always rendered (never
+mounted/unmounted) and only the `hidden` attribute is toggled by
+`refreshVisibility(rulesIndex, tier2)` — so a value typed while a category
+was enabled survives the category being temporarily disabled, consistent
+with Tier 1/3 never losing state. `main.ts` calls `refreshVisibility` at
+every existing call site that already touches Tier 2 state or
+`rulesIndex` (`setRulesIndex`, Tier 2's `onChange`, every `tier2Panel.set`
+call — mode switch, URL load, reset), same wiring shape as
+`notifyUrlSync()`'s existing call sites.
+
+**New widgets in `form-controls.ts`**: `createRecordEditor` (the first
+dynamic-row widget in this app — a repeatable key+value row editor for
+`record`/`recordArray` fields) and `createImportSelectorEditor` (a checkbox
+"all modules" plus include/exclude list inputs for the union fields).
+
+**Critical files**: `src/config/tier4-schema.ts` (new), `src/config/
+options.ts` (extended), `src/config/rule-reconciliation.ts` (`
+isRuleEffectivelyOn` extracted), `src/ui/tier4-panel.ts` (new), `src/ui/
+form-controls.ts` (extended).
+
+**Verification**: unit tests (`test/tier4.test.ts`) generatively round-trip
+every one of the 119 real fields through `visualOptionsToRuffOptions` →
+`ruffOptionsToVisualOptions` (one representative value per kind) plus
+targeted cases for `banned-api`'s `wrapKey`, `importSelector`'s three real
+shapes both directions, malformed values landing in `extraKeys`, and the
+`categoryKey` mismatches — `pnpm test` (314/314), `tsc -b`, `pnpm build`.
+One deep real-browser pass (not 119, given the pure conversion is already
+exhaustively unit-tested): `isort`'s Tier 4 panel is visible from initial
+page load (`I001` is genuinely one of Ruff's own default-enabled rules,
+confirmed via `rules.json` — not a bug); setting `known-first-party` and
+using "Fill from Visual" shows it land correctly in real TOML under
+`[tool.ruff.lint.isort]`; `flake8-import-conventions` (zero default-enabled
+rules) starts hidden, becomes visible on enabling its Tier 2 category,
+hides again on disabling it while a typed `aliases` row (a `record` field)
+survives, and reappears intact on re-enabling; that same row round-trips
+through Copy-link into a fresh browser context; a hand-typed
+`isort.sections` TOML table (a `recordArray` field) round-trips Code→Visual
+with no discard warning. No console errors throughout.
+
+**Unrelated bug found while browser-verifying, not fixed (out of scope for
+this phase)**: the CLI box's shell tokenizer (`shellTokenize` in
+`cli-flags.ts`) has no `#`-comment handling — a `#` token itself is
+correctly reported as an ignored/unknown flag, but any real flag *after* it
+on the same line is still parsed and applied for real. The default CLI
+box text (`defaultCli` in `main.ts`) is three lines of `#`-prefixed
+"examples" (`# --select E,F`, `# --config "line-length=100"`) that look
+inert but are not — confirmed via a direct `cliFlagsToOptions()` call:
+`{ options: { "line-length": 100, lint: { select: ["E", "F"] } }, ... }`.
+This contradicts `main.ts`'s own comment ("commented CLI box means "no
+overrides", not "no config""). Worth fixing before/during a future phase —
+either strip `#`-to-end-of-line before tokenizing, or change the default
+text to not use a syntax the parser doesn't actually honor.
 
 ---
 

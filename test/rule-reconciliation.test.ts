@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { buildRulesIndex, type Rule } from "../src/config/rules-data";
-import { pruneOverrides, toSelectIgnore } from "../src/config/rule-reconciliation";
+import { isRuleEffectivelyOn, pruneOverrides, toSelectIgnore } from "../src/config/rule-reconciliation";
 
 const RULES: Rule[] = [
   { code: "E501", name: "line-too-long", linter: "pycodestyle", summary: "", fixable: false, preview: false, enabled: false },
@@ -107,5 +107,23 @@ describe("pruneOverrides", () => {
     const ruleOverrides = new Map<string, "on" | "off">([["F401", "on"]]);
     pruneOverrides(index, categorySelected, ruleOverrides);
     expect(ruleOverrides.has("F401")).toBe(false);
+  });
+});
+
+describe("isRuleEffectivelyOn", () => {
+  const [e501, e401, f401] = RULES;
+
+  test("a rule with no override or category selection falls back to its own default", () => {
+    expect(isRuleEffectivelyOn(new Set(), new Map(), e501)).toBe(false); // default off
+    expect(isRuleEffectivelyOn(new Set(), new Map(), f401)).toBe(true); // default on
+  });
+
+  test("category selection turns a default-off rule on", () => {
+    expect(isRuleEffectivelyOn(new Set(["pycodestyle"]), new Map(), e501)).toBe(true);
+  });
+
+  test("an explicit override wins over both category selection and the default", () => {
+    expect(isRuleEffectivelyOn(new Set(["pycodestyle"]), new Map([["E401", "off"]]), e401)).toBe(false);
+    expect(isRuleEffectivelyOn(new Set(), new Map([["E501", "on"]]), e501)).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import { toSelectIgnore, type CategorySelected, type RuleOverrides } from "./rule-reconciliation";
 import type { RulesIndex } from "./rules-data";
+import { TIER4_SCHEMA, type Tier4FieldSpec } from "./tier4-schema";
 import { lintToVisual, type LintSelectors } from "./toml-to-visual";
 import { ruffOptionsToTomlText, type RuffOptions } from "./toml-options";
 
@@ -42,16 +43,44 @@ export interface Tier2Options {
   ruleOverrides: Array<[string, "on" | "off"]>;
 }
 
+/** `flake8-tidy-imports`' `ban-lazy`/`require-lazy` — see `ruff.schema.json`'s `ImportSelector`. */
+export interface ImportSelectorValue {
+  include: "all" | string[];
+  exclude?: string[];
+}
+
+/**
+ * A Tier 4 field's value, keyed by `Tier4FieldKind`: `boolean`/`integer`/
+ * `string`/`enum` are scalars, `stringArray` a list, `record`/`recordArray`
+ * a string-keyed map (of strings or of string lists), `importSelector` the
+ * one genuine union (see `ImportSelectorValue`).
+ */
+export type Tier4Value = boolean | number | string | string[] | Record<string, string> | Record<string, string[]> | ImportSelectorValue;
+
+/**
+ * Visual mode's Tier 4 (plugin fine-tuning) state — plugin TOML key (e.g.
+ * `"isort"`) -> field key (Ruff's own kebab-case, e.g. `"known-first-party"`)
+ * -> value. Unlike Tier 1/3, this uses Ruff's own keys directly rather than
+ * a hand-declared camelCase interface — with 119 fields across 27 plugins,
+ * `TIER4_SCHEMA` (`tier4-schema.ts`) is already the single source of truth
+ * for field names, so a second naming layer would add nothing. Only plugin
+ * tables and fields that are actually set are present (mirrors Tier 1/3's
+ * "only set keys present" convention, one level deeper).
+ */
+export type Tier4Options = Record<string, Record<string, Tier4Value>>;
+
 export interface VisualOptions {
   tier1: Tier1Options;
   tier3: Tier3Options;
   tier2: Tier2Options;
+  tier4: Tier4Options;
 }
 
 export const EMPTY_VISUAL_OPTIONS: VisualOptions = {
   tier1: {},
   tier3: {},
   tier2: { categorySelected: [], ruleOverrides: [] },
+  tier4: {},
 };
 
 type FieldKind = "boolean" | "number" | "string";
@@ -103,6 +132,95 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
+/** `ImportSelection` in `ruff.schema.json`: the literal `"all"`, or a bare include list. */
+function isImportSelection(value: unknown): value is "all" | string[] {
+  return value === "all" || isStringArray(value);
+}
+
+/**
+ * Parses `flake8-tidy-imports`' `ban-lazy`/`require-lazy` real shape
+ * (`ImportSelector` — `ImportSelection | ImportSelectorSettings`) into the
+ * always-object `ImportSelectorValue`. Returns `undefined` for anything that
+ * doesn't match one of the two real shapes.
+ */
+function parseImportSelector(value: unknown): ImportSelectorValue | undefined {
+  if (isImportSelection(value)) return { include: value };
+  if (isTable(value)) {
+    const { include, exclude, ...rest } = value;
+    if (Object.keys(rest).length > 0 || !isImportSelection(include)) return undefined;
+    if (exclude === undefined) return { include };
+    if (!isStringArray(exclude)) return undefined;
+    return { include, exclude };
+  }
+  return undefined;
+}
+
+/** Reverses `parseImportSelector`: an empty/absent `exclude` collapses to the bare `ImportSelection` shape, matching how a hand-written TOML would naturally look. */
+function serializeImportSelector(value: ImportSelectorValue): unknown {
+  if (value.exclude !== undefined && value.exclude.length > 0) return { include: value.include, exclude: value.exclude };
+  return value.include;
+}
+
+/** Serializes one Tier 4 field's value to what Ruff's `Options` expects for it. */
+function tier4ValueToRuff(value: Tier4Value, spec: Tier4FieldSpec): unknown {
+  if (spec.kind === "importSelector") return serializeImportSelector(value as ImportSelectorValue);
+  if (spec.kind === "record" && spec.wrapKey !== undefined) {
+    const wrapKey = spec.wrapKey;
+    return Object.fromEntries(Object.entries(value as Record<string, string>).map(([key, inner]) => [key, { [wrapKey]: inner }]));
+  }
+  return value;
+}
+
+/** Parses a raw Ruff value into a Tier 4 field's value, per its `kind`. `undefined` means "doesn't match, treat as an extra key". */
+function ruffValueToTier4(raw: unknown, spec: Tier4FieldSpec): Tier4Value | undefined {
+  switch (spec.kind) {
+    case "boolean":
+      return typeof raw === "boolean" ? raw : undefined;
+    case "integer":
+      return typeof raw === "number" && Number.isInteger(raw) ? raw : undefined;
+    case "string":
+      return typeof raw === "string" ? raw : undefined;
+    case "enum":
+      return typeof raw === "string" && (spec.enumValues?.includes(raw) ?? false) ? raw : undefined;
+    case "stringArray":
+      return isStringArray(raw) ? raw : undefined;
+    case "recordArray":
+      return isTable(raw) && Object.values(raw).every(isStringArray) ? (raw as Record<string, string[]>) : undefined;
+    case "record": {
+      if (!isTable(raw)) return undefined;
+      if (spec.wrapKey === undefined) {
+        return Object.values(raw).every((inner) => typeof inner === "string") ? (raw as Record<string, string>) : undefined;
+      }
+      const wrapKey = spec.wrapKey;
+      const result: Record<string, string> = {};
+      for (const [key, inner] of Object.entries(raw)) {
+        if (!isTable(inner) || Object.keys(inner).length !== 1 || typeof inner[wrapKey] !== "string") return undefined;
+        result[key] = inner[wrapKey];
+      }
+      return result;
+    }
+    case "importSelector":
+      return parseImportSelector(raw);
+  }
+}
+
+/** Builds the `[tool.ruff.lint.<plugin>]` tables Tier 4 state maps to, one per non-empty plugin. */
+function tier4ToRuffLint(tier4: Tier4Options): Record<string, Record<string, unknown>> {
+  const result: Record<string, Record<string, unknown>> = {};
+  for (const plugin of TIER4_SCHEMA) {
+    const fields = tier4[plugin.key];
+    if (!fields) continue;
+    const pluginResult: Record<string, unknown> = {};
+    for (const fieldSpec of plugin.fields) {
+      const value = fields[fieldSpec.key];
+      if (value === undefined) continue;
+      pluginResult[fieldSpec.key] = tier4ValueToRuff(value, fieldSpec);
+    }
+    if (Object.keys(pluginResult).length > 0) result[plugin.key] = pluginResult;
+  }
+  return result;
+}
+
 const LINT_ARRAY_KEYS = ["select", "ignore", "extend-select", "extend-ignore"] as const;
 
 /**
@@ -137,8 +255,13 @@ export function visualOptionsToRuffOptions(visual: VisualOptions, rulesIndex: Ru
   const result = tierToRuffOptions(visual.tier1, TIER1_FIELDS);
   const format = tierToRuffOptions(visual.tier3, TIER3_FIELDS);
   if (Object.keys(format).length > 0) result.format = format;
-  const lint = tier2ToLint(visual.tier2, rulesIndex);
-  if (lint !== undefined) result.lint = lint;
+
+  const lint: Record<string, unknown> = {};
+  const tier2Lint = tier2ToLint(visual.tier2, rulesIndex);
+  if (tier2Lint !== undefined) Object.assign(lint, tier2Lint);
+  Object.assign(lint, tier4ToRuffLint(visual.tier4));
+  if (Object.keys(lint).length > 0) result.lint = lint;
+
   return result;
 }
 
@@ -175,25 +298,50 @@ function isTable(value: unknown): value is Record<string, unknown> {
 
 const EMPTY_TIER2: Tier2Options = { categorySelected: [], ruleOverrides: [] };
 
+const TIER4_PLUGIN_BY_KEY = new Map(TIER4_SCHEMA.map((plugin) => [plugin.key, plugin]));
+
 /**
- * Extracts the four selector arrays this conversion understands from a
- * parsed `[tool.ruff.lint]` table, reporting anything else (an unknown key,
- * or a known key with the wrong type) via `extraKeys` — same pattern as
- * `ruffOptionsToTier`'s `format.*` handling.
+ * Extracts everything this conversion understands from a parsed
+ * `[tool.ruff.lint]` table: the four selector arrays (Tier 2) and any
+ * recognized plugin sub-table (Tier 4, matched against `TIER4_SCHEMA`).
+ * Anything else — an unrecognized top-level key, a known selector key or
+ * plugin field with the wrong shape, a non-table plugin value — is reported
+ * via `extraKeys` instead, same pattern as `ruffOptionsToTier`'s `format.*`
+ * handling.
  */
-function extractLintSelectors(lint: Record<string, unknown>): { selectors: LintSelectors; extraKeys: string[] } {
+function extractLintTables(lint: Record<string, unknown>): { selectors: LintSelectors; tier4: Tier4Options; extraKeys: string[] } {
   const selectors: LintSelectors = {};
+  const tier4: Tier4Options = {};
   const extraKeys: string[] = [];
+
   for (const [key, value] of Object.entries(lint)) {
-    if (!(LINT_ARRAY_KEYS as readonly string[]).includes(key)) {
-      extraKeys.push(`lint.${key}`);
-    } else if (!isStringArray(value)) {
-      extraKeys.push(`lint.${key}`);
-    } else {
-      (selectors as Record<string, string[]>)[key] = value;
+    if ((LINT_ARRAY_KEYS as readonly string[]).includes(key)) {
+      if (isStringArray(value)) (selectors as Record<string, string[]>)[key] = value;
+      else extraKeys.push(`lint.${key}`);
+      continue;
     }
+
+    const plugin = TIER4_PLUGIN_BY_KEY.get(key);
+    if (!plugin) {
+      extraKeys.push(`lint.${key}`);
+      continue;
+    }
+    if (!isTable(value)) {
+      extraKeys.push(`lint.${key}`);
+      continue;
+    }
+    const fieldByKey = new Map(plugin.fields.map((field) => [field.key, field]));
+    const fields: Record<string, Tier4Value> = {};
+    for (const [fieldKey, rawValue] of Object.entries(value)) {
+      const fieldSpec = fieldByKey.get(fieldKey);
+      const parsed = fieldSpec ? ruffValueToTier4(rawValue, fieldSpec) : undefined;
+      if (parsed === undefined) extraKeys.push(`lint.${key}.${fieldKey}`);
+      else fields[fieldKey] = parsed;
+    }
+    if (Object.keys(fields).length > 0) tier4[key] = fields;
   }
-  return { selectors, extraKeys };
+
+  return { selectors, tier4, extraKeys };
 }
 
 /**
@@ -224,20 +372,22 @@ export function ruffOptionsToVisualOptions(
   }
 
   let tier2: Tier2Options = EMPTY_TIER2;
+  let tier4: Tier4Options = {};
   if (lint !== undefined) {
     if (rulesIndex === null) {
       extraKeys.push("lint");
     } else if (!isTable(lint)) {
       extraKeys.push("lint");
     } else {
-      const { selectors, extraKeys: lintExtra } = extractLintSelectors(lint);
+      const { selectors, tier4: parsedTier4, extraKeys: lintExtra } = extractLintTables(lint);
       const { categorySelected, ruleOverrides } = lintToVisual(rulesIndex, selectors);
       tier2 = { categorySelected: [...categorySelected], ruleOverrides: [...ruleOverrides] };
+      tier4 = parsedTier4;
       extraKeys.push(...lintExtra);
     }
   }
 
-  return { visual: { tier1, tier3, tier2 }, extraKeys };
+  return { visual: { tier1, tier3, tier2, tier4 }, extraKeys };
 }
 
 /**

@@ -1,4 +1,4 @@
-import { isSelectedByCategory, pruneOverrides } from "../config/rule-reconciliation";
+import { isRuleEffectivelyOn, isSelectedByCategory, pruneOverrides } from "../config/rule-reconciliation";
 import type { Tier2Options } from "../config/options";
 import { ALL_CATEGORY_KEY, type Category, type Rule, type RulesIndex } from "../config/rules-data";
 import type { Panel } from "./form-controls";
@@ -35,10 +35,7 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
 
   /** The checked state to show for a rule before any override — category (or ALL) selection, else this version's own default. */
   function effectiveOn(rule: Rule): boolean {
-    const override = ruleOverrides.get(rule.code);
-    if (override !== undefined) return override === "on";
-    if (isSelectedByCategory(categorySelected, rule)) return true;
-    return rule.enabled;
+    return isRuleEffectivelyOn(categorySelected, ruleOverrides, rule);
   }
 
   /**

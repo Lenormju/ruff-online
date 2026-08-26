@@ -107,6 +107,19 @@
         display: block;
         margin: 0.1rem 0;
       }
+      #tier4-container details {
+        border: 1px solid #ddd;
+        padding: 0.25rem 0.5rem;
+        margin: 0.25rem 0;
+      }
+      #tier4-container summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      #tier4-container label {
+        display: block;
+        margin: 0.15rem 0;
+      }
       /*
        * Deliberately NOT the red #error-banner styling: a TOML or CLI-flags
        * parse error is a third, distinct kind of failure — the config never
@@ -232,6 +245,8 @@
       <div id="tier3-container"></div>
       <h3>Rule selection</h3>
       <div id="tier2-container"></div>
+      <h3>Plugin fine-tuning</h3>
+      <div id="tier4-container"></div>
     </div>
     <div id="config-status"></div>
 
@@ -246,10 +261,6 @@
     <div id="format-status"></div>
     <div id="diff-view"></div>
 
-    <p><em>
-      Phase 8: the Code facet (TOML base config + CLI override flags) is now available. Still
-      missing: Visual mode's plugin settings (Tier 4).
-    </em></p>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

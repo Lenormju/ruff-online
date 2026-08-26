@@ -23,6 +23,7 @@ import { optionsToVisualWarning } from "./ui/mode-switch";
 import { createTier1Panel } from "./ui/tier1-panel";
 import { createTier2Panel } from "./ui/tier2-panel";
 import { createTier3Panel } from "./ui/tier3-panel";
+import { createTier4Panel } from "./ui/tier4-panel";
 import { formatDiagnostic, renderDiagnostics } from "./ui/diagnostics-panel";
 import { applyLintDiagnostics } from "./editor/lint-integration";
 import { renderDiff } from "./ui/diff-view";
@@ -37,6 +38,7 @@ const visualContainer = document.querySelector<HTMLDivElement>("#visual-containe
 const tier1Container = document.querySelector<HTMLDivElement>("#tier1-container")!;
 const tier2Container = document.querySelector<HTMLDivElement>("#tier2-container")!;
 const tier3Container = document.querySelector<HTMLDivElement>("#tier3-container")!;
+const tier4Container = document.querySelector<HTMLDivElement>("#tier4-container")!;
 const modeCodeRadio = document.querySelector<HTMLInputElement>("#mode-code")!;
 const modeVisualRadio = document.querySelector<HTMLInputElement>("#mode-visual")!;
 const fillFromVisualButton = document.querySelector<HTMLButtonElement>("#fill-from-visual-button")!;
@@ -129,7 +131,17 @@ const cliEditor = createCliEditor(cliContainer, initialState?.cli ?? defaultCli,
 });
 const tier1Panel = createTier1Panel(tier1Container, initialState?.visual.tier1 ?? EMPTY_VISUAL_OPTIONS.tier1, () => notifyUrlSync());
 const tier3Panel = createTier3Panel(tier3Container, initialState?.visual.tier3 ?? EMPTY_VISUAL_OPTIONS.tier3, () => notifyUrlSync());
-const tier2Panel = createTier2Panel(tier2Container, initialState?.visual.tier2 ?? EMPTY_VISUAL_OPTIONS.tier2, () => notifyUrlSync());
+const tier2Panel = createTier2Panel(tier2Container, initialState?.visual.tier2 ?? EMPTY_VISUAL_OPTIONS.tier2, () => {
+  refreshTier4Visibility();
+  notifyUrlSync();
+});
+const tier4Panel = createTier4Panel(tier4Container, initialState?.visual.tier4 ?? EMPTY_VISUAL_OPTIONS.tier4, () => notifyUrlSync());
+
+/** Tier 4 panel visibility depends on both Tier 2 state and the current version's `RulesIndex` — refreshed at every point either can change. */
+function refreshTier4Visibility(): void {
+  tier4Panel.refreshVisibility(currentRulesIndex, tier2Panel.get());
+}
+refreshTier4Visibility();
 
 /** Live-updates `#cli-ignored-notice` from the CLI box's current text — independent of Check/Format. */
 function updateCliIgnoredNotice() {
@@ -152,7 +164,7 @@ function applyModeUI() {
 applyModeUI();
 
 function currentVisualOptions() {
-  return { tier1: tier1Panel.get(), tier3: tier3Panel.get(), tier2: tier2Panel.get() };
+  return { tier1: tier1Panel.get(), tier3: tier3Panel.get(), tier2: tier2Panel.get(), tier4: tier4Panel.get() };
 }
 
 /**
@@ -217,6 +229,7 @@ async function loadRulesIndexFor(entry: VersionEntry): Promise<RulesIndex> {
   if (currentEntry?.version === entry.version) {
     currentRulesIndex = index;
     tier2Panel.setRulesIndex(index);
+    refreshTier4Visibility();
   }
   return index;
 }
@@ -256,6 +269,8 @@ async function switchMode(target: Mode) {
     tier1Panel.set(visual.tier1);
     tier3Panel.set(visual.tier3);
     tier2Panel.set(visual.tier2);
+    tier4Panel.set(visual.tier4);
+    refreshTier4Visibility();
   } else {
     // Visual -> Code is a pure visibility change: whatever is already in the
     // TOML/CLI boxes stays exactly as-is. Populating them from Visual is a
@@ -500,6 +515,8 @@ async function resetAll() {
   tier1Panel.set(EMPTY_VISUAL_OPTIONS.tier1);
   tier3Panel.set(EMPTY_VISUAL_OPTIONS.tier3);
   tier2Panel.set(EMPTY_VISUAL_OPTIONS.tier2);
+  tier4Panel.set(EMPTY_VISUAL_OPTIONS.tier4);
+  refreshTier4Visibility();
 
   mode = "visual";
   applyModeUI();

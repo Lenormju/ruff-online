@@ -34,6 +34,7 @@ describe("visualOptionsToRuffOptions", () => {
       },
       tier3: {},
       tier2: EMPTY_VISUAL_OPTIONS.tier2,
+      tier4: {},
     };
     expect(visualOptionsToRuffOptions(visual, null)).toEqual({
       fix: true,
@@ -57,6 +58,7 @@ describe("visualOptionsToRuffOptions", () => {
         preview: false,
       },
       tier2: EMPTY_VISUAL_OPTIONS.tier2,
+      tier4: {},
     };
     expect(visualOptionsToRuffOptions(visual, null)).toEqual({
       format: {
@@ -71,7 +73,7 @@ describe("visualOptionsToRuffOptions", () => {
   });
 
   test("the format key is omitted entirely when no tier3 field is set", () => {
-    const visual: VisualOptions = { tier1: { lineLength: 88 }, tier3: {}, tier2: EMPTY_VISUAL_OPTIONS.tier2 };
+    const visual: VisualOptions = { tier1: { lineLength: 88 }, tier3: {}, tier2: EMPTY_VISUAL_OPTIONS.tier2, tier4: {} };
     const options = visualOptionsToRuffOptions(visual, null);
     expect(options).not.toHaveProperty("format");
   });
@@ -82,6 +84,7 @@ describe("visualOptionsToRuffOptions", () => {
         tier1: {},
         tier3: {},
         tier2: { categorySelected: ["flake8-bugbear"], ruleOverrides: [] },
+        tier4: {},
       };
       expect(visualOptionsToRuffOptions(visual, null)).toEqual({});
     });
@@ -91,6 +94,7 @@ describe("visualOptionsToRuffOptions", () => {
         tier1: {},
         tier3: {},
         tier2: { categorySelected: ["flake8-bugbear"], ruleOverrides: [] },
+        tier4: {},
       };
       expect(visualOptionsToRuffOptions(visual, rulesIndex)).toEqual({ lint: { select: ["B"] } });
     });
@@ -100,12 +104,13 @@ describe("visualOptionsToRuffOptions", () => {
         tier1: {},
         tier3: {},
         tier2: { categorySelected: [], ruleOverrides: [["B006", "on"]] },
+        tier4: {},
       };
       expect(visualOptionsToRuffOptions(visual, rulesIndex)).toEqual({ lint: { "extend-select": ["B006"] } });
     });
 
     test("nothing touched -> no lint key at all", () => {
-      const visual: VisualOptions = { tier1: {}, tier3: {}, tier2: EMPTY_VISUAL_OPTIONS.tier2 };
+      const visual: VisualOptions = { tier1: {}, tier3: {}, tier2: EMPTY_VISUAL_OPTIONS.tier2, tier4: {} };
       expect(visualOptionsToRuffOptions(visual, rulesIndex)).toEqual({});
     });
   });
@@ -196,6 +201,7 @@ describe("visualOptionsToTomlText", () => {
       tier1: { fix: true, lineLength: 100, targetVersion: "py311" },
       tier3: { quoteStyle: "single", skipMagicTrailingComma: true },
       tier2: { categorySelected: ["flake8-bugbear"], ruleOverrides: [] },
+      tier4: { isort: { "known-first-party": ["myapp"] } },
     };
     const text = visualOptionsToTomlText(visual, rulesIndex);
     const result = tomlToOptions(text);

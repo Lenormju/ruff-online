@@ -9,6 +9,18 @@ export function isSelectedByCategory(categorySelected: CategorySelected, rule: R
 }
 
 /**
+ * Whether `rule` is effectively on right now: an explicit per-rule override
+ * wins, else category selection, else this version's own default. Shared by
+ * `tier2-panel.ts` (per-rule checkbox state) and Tier 4's progressive
+ * disclosure (a plugin panel shows once any rule in its category is on).
+ */
+export function isRuleEffectivelyOn(categorySelected: CategorySelected, ruleOverrides: RuleOverrides, rule: Rule): boolean {
+  const override = ruleOverrides.get(rule.code);
+  if (override !== undefined) return override === "on";
+  return isSelectedByCategory(categorySelected, rule) || rule.enabled;
+}
+
+/**
  * Meaningful per-rule deviations only — never the full resolved set.
  * `'off'` = "turn this rule off even though it would otherwise be on"
  * (whether "on" comes from an explicitly selected category, or from Ruff's
