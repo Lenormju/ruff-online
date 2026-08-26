@@ -15,6 +15,141 @@ The repo is currently empty. The goal now is to turn the agreed design into
 a real, incrementally-shippable build: something working after every phase,
 starting from the smallest possible end-to-end slice.
 
+## Product goals
+
+Established in the UX/UI overhaul design conversation (2026-08-26), before
+which the project had a build plan but no written statement of what it is for.
+
+**What it is.** A tool for *tinkering with, displaying, and explaining* Ruff
+configuration. It is not a config authoring tool: nobody is expected to build
+a production `pyproject.toml` here, and nothing is designed around "leave with
+a config you check in".
+
+**Where it came from.** The originating need was wanting to share a Ruff
+snippet on LinkedIn — showing the result of one config versus another, or one
+version versus another. The artifact the tool produces is therefore **a link**,
+and the audience of that link is a *reader*, not an editor.
+
+**Primary use cases**, in priority order:
+
+1. Share a link that shows a Ruff result to other people.
+2. Tinker with Ruff configuration to see what a given option or rule does.
+3. Learn what Ruff can do — discover rules and options that exist.
+4. Compare across Ruff versions (backlogged; not yet built).
+
+**Audience.** Not a specific persona, and explicitly **not** power users first.
+A reader arriving from social media is the default visitor.
+
+**How it differs from the official Ruff playground** (`play.ruff.rs` — a
+React/Monaco SPA whose source was reviewed directly, 2026-08-26). These are the
+strengths to lean on, and the differences are real, not aspirational:
+
+- **Many Ruff versions vs. their one.** The playground's `VersionTag` is a
+  display-only badge; it runs whatever version it was built with. Version
+  choice is this project's only genuinely unique capability.
+- **Discovery vs. recall.** The playground's config is a raw JSON blob you must
+  already know how to write. This tool lets you *find* an option or rule you
+  didn't know existed.
+- **Real-world input formats.** The playground takes JSON, which is not how
+  anyone configures Ruff. This tool takes `pyproject.toml` pasted from a repo
+  and CLI flags pasted from a terminal.
+- **No backend at all.** The playground POSTs your snippet to a Cloudflare
+  Workers KV store to mint a share link. Here the entire state lives in the URL
+  fragment: nothing is transmitted, links cannot rot, and they work offline.
+
+Where the playground is ahead and it is worth catching up: always-live
+formatting rather than a separate Format click, dark mode, and general polish.
+Where it is ahead and this project should **not** follow: AST / Tokens /
+Formatter IR panels, which are a Ruff *contributor* tool, not a user tool.
+
+**Non-goals.**
+
+- Production config authoring.
+- Social-media reach optimization. Every shared link gets the same generic
+  preview card, deliberately — see the Backlog's sharing section.
+- Being or resembling an official Astral product.
+- Ruff-internals inspection (AST, tokens, IR).
+
+**Definition of done for the overhaul:** the site is polished enough to post
+publicly. No deadline.
+
+## Design rules
+
+The hard rules the app is held to. The first two predate this conversation and
+were restated; the rest were made explicit during it.
+
+1. **Never change user input without consent.** Format never auto-replaces
+   (diff + explicit Apply). Mode switches never clobber a text buffer. Reset
+   confirms.
+2. **No silent errors — ever.** This is a hard floor, not a preference. A
+   config that never reached Ruff, a flag that was ignored, a rule code that
+   doesn't exist in the selected version, a share link that failed to decode:
+   all of it is said out loud. Nothing is silently dropped, silently
+   substituted, or silently defaulted.
+3. **"Understand what happened" is the soft goal above that floor.** Beyond not
+   hiding errors, the user should be able to see *why* the current output is
+   what it is. Aim for it; it is not a blocker.
+4. **Messages appear where they belong.** Each error/warning/info is surfaced
+   at its place in the data flow, next to the thing that caused it — not
+   collected in a distant stack of banners.
+5. **Explicit state, never inferred.** Rule selection stores the user's *delta*
+   over the selected version's real defaults, in two separate containers
+   (category selections and per-rule overrides) that are never derived from
+   each other by counting or majority vote.
+6. **Verify against the real thing.** Rule data is generated per version from
+   real Ruff. CLI flags were checked against real `ruff check --help` (which
+   killed two invented flags). Option schemas come from the real
+   `ruff.schema.json`. Never from assumption or memory.
+7. **Use Ruff's vocabulary.** See the Vocabulary section below.
+8. **Nothing leaves the browser.** No backend, no telemetry, no upload. State
+   lives in the URL fragment, which is never transmitted.
+
+**The data flow the UI must express** (user's own formulation):
+
+```
+Python code → Ruff version → Ruff config (Visual or Code) → run (auto or manual)
+  → diagnostics: check + format, together
+  → apply suggested changes
+```
+
+Results are presented back up alongside the Python code. Check and format are
+not alternative actions: both run, and either can be hidden.
+
+## Vocabulary
+
+**Invented jargon must die.** The internal "Tier 1/2/3/4" naming and the
+user-facing "Plugin fine-tuning" label are both made up and are to be replaced
+by Ruff's own terms. Ruff's settings documentation uses exactly four groups,
+and this app's four tiers map onto them one-to-one:
+
+| Internal (to be retired) | Ruff's actual term |
+|---|---|
+| Tier 1 | **Top-level** — `[tool.ruff]` |
+| Tier 2 | **lint** — `[tool.ruff.lint]`, i.e. `select` / `ignore` / `extend-select` |
+| Tier 3 | **format** — `[tool.ruff.format]` |
+| Tier 4 | **`lint.<linter>`** — e.g. `[tool.ruff.lint.isort]` |
+
+**Labelling style: name + TOML path.** Ruff's exact token is the label, and the
+TOML path is shown alongside it — e.g. **isort** `[tool.ruff.lint.isort]`, or
+**line-length** `[tool.ruff] line-length`. Both halves are Ruff's own
+vocabulary; neither is ours. Rejected: bare literal paths (`lint.isort`,
+unambiguous but ugly) and plain-English relabelling ("Formatting", "Line
+length" — reintroduces exactly the invented words this rule exists to remove).
+
+**"Linter" = a group of rules** (isort, flake8-bugbear, Pyflakes). Ruff itself
+has no single noun for these — its rules page groups them by source name and
+its settings page only ever writes `lint.<name>` — but `linter` is the term
+Ruff's own rule data uses, and it is the term this app uses. **Not "plugin".**
+
+**Clarification is opt-in.** Where a Ruff term genuinely needs explaining, the
+explanation is added on top of the Ruff term, never in place of it, and only on
+explicit approval.
+
+**Words we must coin ourselves** — because Ruff has no equivalent and the
+concept is ours: "Code" and "Visual" (the two input methods), and whatever we
+end up calling options that cannot apply in a browser. These are defined by our
+use cases and must be defined *in the app*, not assumed.
+
 ## Decisions locked in (do not relitigate during implementation)
 
 - **Engine**: `@astral-sh/ruff-wasm-web`'s `Workspace` class, loaded at
@@ -71,6 +206,52 @@ starting from the smallest possible end-to-end slice.
 - **Testing**: unit tests for pure logic (rule reconciliation, TOML↔Options,
   CLI-flag mapping) + the wasm smoke test embedded in the CI ingestion
   workflow. No browser UI/visual-regression suite.
+
+## Decisions revised in the UX/UI overhaul design pass (2026-08-26)
+
+These supersede the corresponding text above. Recorded at the level of broad
+direction; the detailed shape of each is deliberately left open.
+
+- **Code and Visual are two independent input methods, not two
+  representations of one thing.** This replaces the whole
+  conversion-between-facets model above. There is no Code→Visual conversion,
+  no Visual→Code conversion, no lossy-switch warning, and no "Fill from
+  Visual". Each method holds its own state and feeds Ruff when it is the
+  active one. The one exception is a deliberate, explicit **"export /
+  visualize as TOML"** feature on the Visual side — a way to *see and copy*
+  the config as TOML, not an input path back into Code. Consequence to work
+  through later: `toml-to-visual.ts`'s ambiguous reverse conversion is no
+  longer needed for mode switching, and only survives if we separately decide
+  we want an explicit "import my TOML into Visual" action.
+- **Visual must have no holes.** Every Ruff option is represented, including
+  the ones that cannot apply in a browser. Those are **shown but disabled**,
+  with an explanation — because the tool is about discovery, and because
+  hiding them would be a silent drop. This resolves the apparent tension
+  between "Visual shouldn't offer meaningless options" (it doesn't offer them
+  as *usable*) and "no holes" (they're still visible and explained).
+- **The "cannot apply in a browser" concept is uniform across all input
+  methods.** Today only the CLI box names its ignored flags; TOML silently
+  accepts `cache-dir` and friends, and Visual has no notion of them at all.
+  One consistent treatment, everywhere.
+- **Frontend framework: Svelte.** The project is explicitly past the prototype
+  phase, and that change of temporality is what makes a framework appropriate
+  now — the original "vanilla TS, no framework" decision was right for a
+  prototype and is no longer the right default. Svelte was chosen over React
+  as the better fit for this specific app: it is form-heavy (~190 config
+  fields), needs clean imperative escape hatches for CodeMirror, and benefits
+  from component-scoped styling. React remains the alternative if a mature
+  headless-widget ecosystem turns out to matter more than form ergonomics.
+  Static build to GitHub Pages is unchanged and remains a hard constraint.
+  All existing tests are pure-logic and are unaffected by this.
+- **Both check and format always run**, presented together, either hideable —
+  rather than being two mutually exclusive actions.
+- **Browser history is the undo mechanism**, with state saved on a ~1-second
+  cadence. This reverses the earlier "always `replaceState`, never
+  `pushState`" and "never apply state on `hashchange`" rules. Typing and
+  clicking are considered intent enough to record. Two known drawbacks,
+  accepted: escaping the app via Back gets harder as history grows, and
+  CodeMirror's own undo stack will need tying into the global state rather
+  than running independently.
 
 ## Project structure
 
@@ -819,6 +1000,16 @@ errors, screenshot captured for the README from the same session.
 | 9 | Visual Tier 4 (plugins) | squiggles |
 | 10 | Inline squiggles | (feature-complete per current spec) |
 | 11 | README + in-app help notice | — |
+
+---
+
+## Backlog
+
+Moved to [BACKLOG.md](BACKLOG.md), which merges the feature backlog captured
+during the overhaul design pass, the "Known gap, deferred" notes previously
+scattered through this file's phase sections, and a full codebase assessment
+against the goals and design rules above. That file is the work queue; this one
+holds goals, design rules, vocabulary, and decisions.
 
 ---
 
