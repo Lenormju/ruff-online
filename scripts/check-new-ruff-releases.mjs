@@ -10,6 +10,20 @@ const RELEASES_URL =
   "https://api.github.com/repos/astral-sh/ruff/releases?per_page=100";
 const SUPPORTED_VERSIONS_PATH = "public/supported-versions.json";
 
+// @astral-sh/ruff-wasm-web only started exporting `PositionEncoding` at this
+// version; older builds can't construct a `Workspace` the way we need
+// (see src/engine/workspace.ts), so the smoke test can never pass for them.
+const MIN_SUPPORTED_VERSION = "0.13.2";
+
+function isAtLeast(version, floor) {
+  const v = version.split(".").map(Number);
+  const f = floor.split(".").map(Number);
+  for (let i = 0; i < f.length; i++) {
+    if ((v[i] ?? 0) !== f[i]) return (v[i] ?? 0) > f[i];
+  }
+  return true;
+}
+
 /**
  * @param {{tag_name: string, draft: boolean, prerelease: boolean}[]} releases
  * @param {string[]} existingVersions
@@ -20,7 +34,10 @@ export function findNewVersions(releases, existingVersions) {
   return releases
     .filter(
       (release) =>
-        !release.draft && !release.prerelease && !known.has(release.tag_name)
+        !release.draft &&
+        !release.prerelease &&
+        !known.has(release.tag_name) &&
+        isAtLeast(release.tag_name, MIN_SUPPORTED_VERSION)
     )
     .map((release) => release.tag_name);
 }
