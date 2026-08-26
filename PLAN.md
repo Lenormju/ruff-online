@@ -245,6 +245,22 @@ incognito window, confirm exact restoration. Edit after load, confirm hash
 updates without growing browser history, and that a stale previously-copied
 URL never clobbers an in-progress edit.
 
+**Known gap, deferred (not this phase)**: the sync from "component state
+changed" to "URL updated" is currently three manually-wired call-sites in
+`main.ts` (the Python editor's and TOML editor's `onChange`, and the
+version `<select>`'s `change` listener each explicitly call
+`notifyUrlSync()`) — not a single funnel a new control is forced to go
+through. `main.ts`'s wiring itself has no automated test (this repo has no
+jsdom, by design — see Testing decisions above), so a future edit that
+silently drops one of those calls, or a new Phase 6/7 control (Tier 1/3
+fields, rule-override checkboxes, mode switch) that forgets to wire itself
+up, would pass `pnpm test` and `tsc -b` while quietly no longer round-
+tripping through the URL. Before or during Phase 6, when the number of
+state-affecting controls grows, revisit: either centralize all
+state-affecting writes through one setter that itself triggers sync
+(harder to forget), or add a jsdom-based wiring test for this specific
+path despite the general no-jsdom stance.
+
 ---
 
 ## Phase 6 — Visual Mode, Tier 1 + Tier 3 (second mode; mode-switch machinery introduced here)
