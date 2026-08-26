@@ -131,6 +131,18 @@
         border: 1px solid #d9a300;
         color: #7a5600;
       }
+      #debug-output {
+        display: none;
+        padding: 0.75rem 1rem;
+        border-radius: 4px;
+        margin-top: 0.5rem;
+        white-space: pre-wrap;
+        font-family: ui-monospace, monospace;
+        font-size: 0.8rem;
+        background: #f0f0f0;
+        border: 1px solid #999;
+        overflow-x: auto;
+      }
       #diff-view:empty {
         display: none;
       }
@@ -150,11 +162,13 @@
       <button id="format-button">Format</button>
       <button id="apply-button">Apply</button>
       <button id="copy-link-button">Copy link</button>
+      <button id="dump-state-button">Dump URL state to JSON</button>
     </p>
     <div id="url-warning">
       This page's URL is over ~6000 characters — some browsers or link-sharing tools may truncate a shared link
       this long.
     </div>
+    <pre id="debug-output"></pre>
 
     <h2>Configuration</h2>
     <p>

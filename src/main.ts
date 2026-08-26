@@ -34,6 +34,8 @@ const checkButton = document.querySelector<HTMLButtonElement>("#check-button")!;
 const formatButton = document.querySelector<HTMLButtonElement>("#format-button")!;
 const applyButton = document.querySelector<HTMLButtonElement>("#apply-button")!;
 const copyLinkButton = document.querySelector<HTMLButtonElement>("#copy-link-button")!;
+const dumpStateButton = document.querySelector<HTMLButtonElement>("#dump-state-button")!;
+const debugOutput = document.querySelector<HTMLPreElement>("#debug-output")!;
 const versionSelect = document.querySelector<HTMLSelectElement>("#version-select")!;
 const configStatus = document.querySelector<HTMLDivElement>("#config-status")!;
 const resultsList = document.querySelector<HTMLUListElement>("#results")!;
@@ -362,6 +364,11 @@ collapseUnchangedToggle.addEventListener("change", () => {
 
 copyLinkButton.addEventListener("click", () => {
   void copyLink();
+});
+
+dumpStateButton.addEventListener("click", () => {
+  debugOutput.textContent = JSON.stringify(getCurrentAppState(), null, 2);
+  debugOutput.style.display = "block";
 });
 
 async function copyLink() {
