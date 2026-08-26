@@ -59,7 +59,33 @@ const collapseUnchangedToggle = document.querySelector<HTMLInputElement>("#colla
 const urlWarning = document.querySelector<HTMLDivElement>("#url-warning")!;
 const positionEncodingWarning = document.querySelector<HTMLDivElement>("#position-encoding-warning")!;
 
-const defaultCode = "import os";
+// Deliberately messy: exercises both Check (F401 unused imports, F541 f-string,
+// E711, E722 all fire under Ruff's default select) and Format (quote/spacing
+// normalization) so the default page load already shows something meaningful.
+const defaultCode = [
+  "import os",
+  "import sys",
+  "",
+  "",
+  'def greet(name):',
+  '    message = f"Hello"',
+  "    if message == None:",
+  "        pass",
+  "    return message",
+  "",
+  "",
+  "class Person:",
+  "    def __init__(self, name):",
+  "        self.name=name",
+  "",
+  "",
+  "try:",
+  '    p = Person( "World" )',
+  "    print( greet(p.name) )",
+  "except:",
+  "    pass",
+  "",
+].join("\n");
 // An empty [tool.ruff] table means Ruff's defaults — nothing is silently
 // already in force until Check is clicked.
 const defaultToml = ["[tool.ruff]", "# line-length = 88", '# lint.select = ["E", "F"]', ""].join("\n");
