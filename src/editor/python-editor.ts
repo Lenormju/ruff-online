@@ -1,5 +1,6 @@
 import { basicSetup, EditorView } from "codemirror";
 import { python } from "@codemirror/lang-python";
+import { lintExtensions } from "./lint-integration";
 
 export function createPythonEditor(parent: HTMLElement, doc: string, onChange?: () => void): EditorView {
   return new EditorView({
@@ -7,6 +8,7 @@ export function createPythonEditor(parent: HTMLElement, doc: string, onChange?: 
     extensions: [
       basicSetup,
       python(),
+      ...lintExtensions,
       ...(onChange ? [EditorView.updateListener.of((update) => update.docChanged && onChange())] : []),
     ],
     parent,

@@ -519,6 +519,36 @@ alongside (not instead of) the existing diagnostics list.
 **Verification**: F401 test again, confirm squiggly + hover message appear
 in addition to the list entry.
 
+**Status: done** (built out of order — Phases 8 and 9, CLI-flags mode and
+Tier 4 plugin fine-tuning, are still unbuilt; the user explicitly chose to
+jump ahead). `src/editor/lint-integration.ts` holds `toLintDiagnostics`
+(pure, TDD'd — reuses `offsetFromRowColumn` from Phase 1, so it inherits
+that phase's already-verified UTF-16/surrogate-pair correctness rather than
+re-deriving it) and `lintExtensions`/`applyLintDiagnostics`. `linter(() =>
+[])` is registered with a no-op source (`Check` stays the single explicit
+trigger, matching the results-list behavior — no automatic per-keystroke
+linting), plus `lintGutter()`; `applyLintDiagnostics(editor, diagnostics)`
+pushes results in externally via `@codemirror/lint`'s `setDiagnostics` right
+after `renderDiagnostics` in `main.ts`'s `showResults`, and is cleared
+(empty array) in `clearOutput()` — so a syntax error (which replaces the
+list with the red banner, never rendering it) also gets no squiggles,
+consistent with the list. A zero-width diagnostic range is widened by one
+character (else nothing renders); a diagnostic anchored at the very end of
+the document is clamped rather than widened past `doc.length`. Verified via
+`pnpm test` (124/124), `tsc -b`, `pnpm build`, and a real headless-Chromium
+pass: `F401` on `import os` shows both a squiggly underline
+(`.cm-lintRange-error`) and a gutter marker (`.cm-lint-marker-error`);
+hovering the gutter marker shows the tooltip with the exact message +
+code; introducing a syntax error clears the squiggle instead of layering
+it under the red banner. **Known automation quirk, not a product bug**:
+hovering directly over the inline underline itself didn't reliably surface
+`@codemirror/lint`'s hover tooltip under synthetic Playwright/CDP mouse
+events in headless mode, even though the events demonstrably reached the
+editor DOM (confirmed via an injected listener) — the gutter marker's
+hover, which is the same underlying feature, worked immediately. Not
+investigated further since this is stock `@codemirror/lint` behavior, not
+custom code.
+
 ---
 
 ## Phase 11 — Polished README + In-App Help

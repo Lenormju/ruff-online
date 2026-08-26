@@ -17,6 +17,7 @@ import { createTier1Panel } from "./ui/tier1-panel";
 import { createTier2Panel } from "./ui/tier2-panel";
 import { createTier3Panel } from "./ui/tier3-panel";
 import { formatDiagnostic, renderDiagnostics } from "./ui/diagnostics-panel";
+import { applyLintDiagnostics } from "./editor/lint-integration";
 import { renderDiff } from "./ui/diff-view";
 import { createUrlSync, loadInitialState } from "./state/app-state";
 import type { AppState } from "./state/url-state";
@@ -215,6 +216,7 @@ function clearOutput() {
   resultsList.replaceChildren();
   errorBanner.style.display = "none";
   errorBanner.textContent = "";
+  applyLintDiagnostics(editor, []);
 }
 
 function clearConfigStatus() {
@@ -250,6 +252,7 @@ function showResults(diagnostics: Awaited<ReturnType<typeof checkCode>>) {
   }
 
   renderDiagnostics(resultsList, diagnostics, editor);
+  applyLintDiagnostics(editor, diagnostics);
 }
 
 function showError(error: unknown) {
