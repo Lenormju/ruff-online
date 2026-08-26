@@ -1,4 +1,13 @@
-import { isRuleEffectivelyOn, isSelectedByCategory, pruneOverrides } from "../config/rule-reconciliation";
+import {
+  applyCategoryPhase,
+  categoryPhase,
+  cycleOverride,
+  isRuleEffectivelyOn,
+  isSelectedByCategory,
+  nextCategoryPhase,
+  pruneStaleOverrides,
+  type CategoryPhase,
+} from "../config/rule-reconciliation";
 import type { Tier2Options } from "../config/options";
 import { ALL_CATEGORY_KEY, type Category, type Rule, type RulesIndex } from "../config/rules-data";
 import type { Panel } from "./form-controls";
@@ -6,6 +15,15 @@ import type { Panel } from "./form-controls";
 export interface Tier2Panel extends Panel<Tier2Options> {
   /** Called once the current Ruff version's `rules.json` is loaded, and again on every version change. */
   setRulesIndex(index: RulesIndex): void;
+}
+
+/** A category label's phase-derived state, for the muted-vs-normal "default" styling and the tooltip text. */
+function phaseLabel(phase: CategoryPhase, onCount: number, total: number): string {
+  if (phase === "selected") return "selected";
+  if (phase === "deselected") return "deselected";
+  if (onCount === total) return "default (selected)";
+  if (onCount === 0) return "default (deselected)";
+  return "partially selected (default)";
 }
 
 /**
@@ -30,8 +48,8 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
   // header/checkbox it affects without a full re-render (which would also
   // collapse any <details> the user had open).
   let ruleCheckboxesByCode = new Map<string, HTMLInputElement>();
-  let categoryHeaders: Array<{ checkbox: HTMLInputElement; countLabel: HTMLElement; category: Category }> = [];
-  let allHeader: { checkbox: HTMLInputElement; countLabel: HTMLElement } | null = null;
+  let categoryHeaders: Array<{ checkbox: HTMLInputElement; countLabel: HTMLElement; summary: HTMLElement; category: Category }> = [];
+  let allHeader: { checkbox: HTMLInputElement; countLabel: HTMLElement; row: HTMLElement } | null = null;
 
   /** The checked state to show for a rule before any override — category (or ALL) selection, else this version's own default. */
   function effectiveOn(rule: Rule): boolean {
@@ -45,43 +63,78 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
    * currently effectively on. Used for both real categories and the
    * top-level ALL toggle (whose `rules` is the entire rule set).
    */
-  function updateHeader(checkbox: HTMLInputElement, countLabel: HTMLElement, rules: Rule[]): void {
+  function updateHeader(checkbox: HTMLInputElement, countLabel: HTMLElement, container: HTMLElement, category: Category): void {
+    const rules = category.rules;
     const onCount = rules.filter(effectiveOn).length;
     checkbox.checked = onCount === rules.length;
     checkbox.indeterminate = onCount > 0 && onCount < rules.length;
     countLabel.textContent = `(${onCount}/${rules.length})`;
+
+    const phase = categoryPhase(category, categorySelected, ruleOverrides);
+    const label = phaseLabel(phase, onCount, rules.length);
+    container.title = label;
+    container.classList.toggle("tier2-default", phase === "default");
   }
 
   /** Refreshes every rendered header/checkbox after any state change, wherever it originated. */
   function refreshAll(): void {
     for (const [code, checkbox] of ruleCheckboxesByCode) {
       const rule = index?.byCode.get(code);
-      if (rule) checkbox.checked = effectiveOn(rule);
+      if (rule) {
+        const override = ruleOverrides.get(code);
+        if (override === undefined) {
+          checkbox.indeterminate = true;
+          checkbox.title = `default — currently ${effectiveOn(rule) ? "on" : "off"}`;
+        } else {
+          checkbox.indeterminate = false;
+          checkbox.checked = override === "on";
+          checkbox.title = "";
+        }
+        checkbox.closest("label")?.classList.toggle("tier2-default", override === undefined);
+      }
     }
-    for (const { checkbox, countLabel, category } of categoryHeaders) {
-      updateHeader(checkbox, countLabel, category.rules);
+    for (const { checkbox, countLabel, summary, category } of categoryHeaders) {
+      updateHeader(checkbox, countLabel, summary, category);
     }
-    if (allHeader && index) updateHeader(allHeader.checkbox, allHeader.countLabel, index.rules);
+    if (allHeader && index) {
+      const allCategory: Category = { key: ALL_CATEGORY_KEY, rules: index.rules, prefixes: [ALL_CATEGORY_KEY] };
+      updateHeader(allHeader.checkbox, allHeader.countLabel, allHeader.row, allCategory);
+    }
+  }
+
+  /**
+   * Wires a category header checkbox (real category, or the synthetic ALL
+   * one) to the shared bulk-action cycle. Uses `change`, not `click`, and
+   * ignores the checkbox's own post-click `checked`/`indeterminate` (native
+   * behavior always lands on `checked = true` from indeterminate, which we
+   * don't want) — `refreshAll()` overwrites it with our own computed state
+   * afterwards. A `click` handler with `preventDefault()` would look
+   * equivalent but isn't: canceling a checkbox's click rolls its
+   * checked/indeterminate back to their pre-click values *after* every click
+   * listener has already run, silently undoing anything we set from inside
+   * one.
+   */
+  function attachCategoryToggle(checkbox: HTMLInputElement, category: Category): void {
+    checkbox.addEventListener("change", () => {
+      const phase = categoryPhase(category, categorySelected, ruleOverrides);
+      applyCategoryPhase(category, nextCategoryPhase(phase), categorySelected, ruleOverrides);
+      refreshAll();
+      onChange();
+    });
   }
 
   function renderAllToggle(rules: Rule[]): HTMLElement {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     const countLabel = document.createElement("span");
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) categorySelected.add(ALL_CATEGORY_KEY);
-      else categorySelected.delete(ALL_CATEGORY_KEY);
-      if (index) pruneOverrides(index, categorySelected, ruleOverrides);
-      refreshAll();
-      onChange();
-    });
-    allHeader = { checkbox, countLabel };
+    const allCategory: Category = { key: ALL_CATEGORY_KEY, rules, prefixes: [ALL_CATEGORY_KEY] };
+    attachCategoryToggle(checkbox, allCategory);
 
     const label = document.createElement("label");
     label.append(checkbox, ` ${ALL_CATEGORY_KEY} — every rule `, countLabel);
     const row = document.createElement("p");
     row.append(label);
-    updateHeader(checkbox, countLabel, rules);
+    allHeader = { checkbox, countLabel, row };
     return row;
   }
 
@@ -89,37 +142,30 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
     const categoryCheckbox = document.createElement("input");
     categoryCheckbox.type = "checkbox";
     const countLabel = document.createElement("span");
-    categoryCheckbox.addEventListener("change", () => {
-      // Clicking a partial (indeterminate) checkbox always lands on checked=true
-      // (native browser behavior) — i.e. "select the rest of this category".
-      if (categoryCheckbox.checked) categorySelected.add(category.key);
-      else categorySelected.delete(category.key);
-      if (index) pruneOverrides(index, categorySelected, ruleOverrides);
-      refreshAll();
-      onChange();
-    });
-    categoryHeaders.push({ checkbox: categoryCheckbox, countLabel, category });
+    attachCategoryToggle(categoryCheckbox, category);
 
     const summary = document.createElement("summary");
     summary.append(categoryCheckbox, ` ${category.prefixes.join("/")} — ${category.key} `, countLabel);
-    updateHeader(categoryCheckbox, countLabel, category.rules);
+    categoryHeaders.push({ checkbox: categoryCheckbox, countLabel, summary, category });
 
     const list = document.createElement("ul");
     for (const rule of category.rules) {
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
-      checkbox.checked = effectiveOn(rule);
-      checkbox.title = rule.summary;
       checkbox.addEventListener("change", () => {
+        // See `attachCategoryToggle`'s doc comment: `change`, not `click`
+        // with `preventDefault()`, for the same reason.
         const baselineOn = isSelectedByCategory(categorySelected, rule) ? true : rule.enabled;
-        if (checkbox.checked === baselineOn) ruleOverrides.delete(rule.code);
-        else ruleOverrides.set(rule.code, checkbox.checked ? "on" : "off");
+        const next = cycleOverride(ruleOverrides.get(rule.code), baselineOn);
+        if (next === undefined) ruleOverrides.delete(rule.code);
+        else ruleOverrides.set(rule.code, next);
         refreshAll();
         onChange();
       });
       ruleCheckboxesByCode.set(rule.code, checkbox);
 
       const label = document.createElement("label");
+      label.title = rule.summary;
       label.append(checkbox, ` ${rule.code} — ${rule.name}`);
       const item = document.createElement("li");
       item.append(label);
@@ -144,6 +190,7 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
       .filter((category) => category.key !== ALL_CATEGORY_KEY)
       .sort((a, b) => a.key.localeCompare(b.key));
     container.replaceChildren(renderAllToggle(index.rules), ...realCategories.map(renderCategory));
+    refreshAll();
   }
 
   function get(): Tier2Options {
@@ -158,6 +205,7 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
 
   function setRulesIndex(newIndex: RulesIndex): void {
     index = newIndex;
+    pruneStaleOverrides(index, ruleOverrides);
     render();
   }
 

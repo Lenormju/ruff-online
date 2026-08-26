@@ -1,4 +1,4 @@
-import { ALL_CATEGORY_KEY, type Rule, type RulesIndex } from "./rules-data";
+import { ALL_CATEGORY_KEY, type Category, type Rule, type RulesIndex } from "./rules-data";
 
 /** Categories the user explicitly checked "select all" for. Keyed by `Category.key` (the `linter` field, or `ALL_CATEGORY_KEY`). */
 export type CategorySelected = Set<string>;
@@ -21,10 +21,17 @@ export function isRuleEffectivelyOn(categorySelected: CategorySelected, ruleOver
 }
 
 /**
- * Meaningful per-rule deviations only — never the full resolved set.
+ * An explicit per-rule choice, distinct from the category/default baseline.
  * `'off'` = "turn this rule off even though it would otherwise be on"
  * (whether "on" comes from an explicitly selected category, or from Ruff's
  * own per-version default-enabled set). `'on'` is the mirror image.
+ *
+ * Kept until something explicit changes it again — the rule's own control
+ * cycling past it back to "default" (`tier2-panel.ts`'s `cycleOverride`), or
+ * its category's bulk select/deselect action overwriting it
+ * (`applyCategoryPhase`) — never silently dropped just because it currently
+ * happens to match the baseline (e.g. a category selection elsewhere, or a
+ * version switch, shifting what the baseline resolves to).
  */
 export type RuleOverrides = Map<string, "on" | "off">;
 
@@ -81,9 +88,11 @@ export function toSelectIgnore(
       if (hasCategorySelection) select.push(code);
       else extendSelect.push(code);
     }
-    // else: override is redundant given current category/baseline state; a
-    // caller that calls pruneOverrides on every category toggle shouldn't
-    // hit this, but skip defensively rather than emit a no-op selector.
+    // else: override is redundant given current category/baseline state
+    // right now (e.g. a pinned 'on' rule inside a category already
+    // selecting it) — contributes nothing to this call's output, but stays
+    // in `ruleOverrides` so it's picked up correctly if the baseline later
+    // changes (see `RuleOverrides`' doc comment).
   }
 
   const result: SelectIgnoreResult = {};
@@ -94,20 +103,83 @@ export function toSelectIgnore(
 }
 
 /**
- * Drops overrides that are no longer meaningful given the current
- * `categorySelected` (e.g. an `'off'` carve-out left behind after its
- * category got unchecked and the rule isn't enabled by default either).
- * Call this whenever `categorySelected` changes.
+ * Drops overrides for rule codes that no longer exist in this version's
+ * `rules.json` (e.g. after switching Ruff versions). Overrides are
+ * otherwise never auto-dropped just for currently matching the baseline —
+ * see `RuleOverrides`' doc comment — so this is the only cleanup left; call
+ * it whenever `rulesIndex` changes.
  */
-export function pruneOverrides(index: RulesIndex, categorySelected: CategorySelected, ruleOverrides: RuleOverrides): void {
-  for (const [code, state] of [...ruleOverrides]) {
-    const rule = index.byCode.get(code);
-    if (!rule) {
-      ruleOverrides.delete(code); // code doesn't exist in this version's rules.json anymore
-      continue;
-    }
-    const baselineOn = isSelectedByCategory(categorySelected, rule) ? true : rule.enabled;
-    const stillMeaningful = (state === "off" && baselineOn) || (state === "on" && !baselineOn);
-    if (!stillMeaningful) ruleOverrides.delete(code);
+export function pruneStaleOverrides(index: RulesIndex, ruleOverrides: RuleOverrides): void {
+  for (const code of [...ruleOverrides.keys()]) {
+    if (!index.byCode.has(code)) ruleOverrides.delete(code);
+  }
+}
+
+/**
+ * Advances one rule's override through its 3-state cycle on a single click:
+ * `default -> flipped -> matching -> default -> ...`, where "flipped"/
+ * "matching" are relative to `baselineOn` (recomputed by the caller on every
+ * click, since it can shift between clicks — e.g. the rule's category was
+ * toggled in between). Deliberately baseline-*relative* rather than a fixed
+ * `"on" -> "off" -> default` order: a fixed order would mean the first click
+ * out of "default" on an already-default-on rule does nothing visible (it'd
+ * just get silently pinned while staying checked) — confusing, and exactly
+ * the "can't disable it" symptom this whole cycle exists to fix. This way
+ * the first click out of "default" always flips what's actually shown.
+ */
+export function cycleOverride(current: "on" | "off" | undefined, baselineOn: boolean): "on" | "off" | undefined {
+  const flipped = baselineOn ? "off" : "on";
+  const matching = baselineOn ? "on" : "off";
+  if (current === undefined) return flipped;
+  if (current === flipped) return matching;
+  return undefined;
+}
+
+/**
+ * A category header's own 3-state cycle, mirroring `cycleOverride` in shape
+ * but applied in bulk to every rule in the category (see
+ * `applyCategoryPhase`). `"default"` covers both "genuinely untouched" and
+ * any partial/mixed state that doesn't exactly match a prior bulk action —
+ * the same "land on selected first" convention a native indeterminate
+ * checkbox uses.
+ */
+export type CategoryPhase = "selected" | "deselected" | "default";
+
+/** The category's current phase, derived from state — never itself stored. */
+export function categoryPhase(category: Category, categorySelected: CategorySelected, ruleOverrides: RuleOverrides): CategoryPhase {
+  if (categorySelected.has(category.key)) return "selected";
+  if (category.rules.every((rule) => ruleOverrides.get(rule.code) === "off")) return "deselected";
+  return "default";
+}
+
+export function nextCategoryPhase(phase: CategoryPhase): CategoryPhase {
+  if (phase === "default") return "selected";
+  if (phase === "selected") return "deselected";
+  return "default";
+}
+
+/**
+ * Bulk-applies `phase` to every rule in `category`, "as if the user had
+ * clicked each one individually" — which is what makes unchecking a
+ * category that's coincidentally all-on by default actually work (it
+ * writes a real `'off'` to every rule, rather than only ever touching
+ * `categorySelected`), and what lets a category's bulk action supersede any
+ * prior one-off choice on a rule inside it.
+ */
+export function applyCategoryPhase(
+  category: Category,
+  phase: CategoryPhase,
+  categorySelected: CategorySelected,
+  ruleOverrides: RuleOverrides,
+): void {
+  if (phase === "selected") {
+    categorySelected.add(category.key);
+    for (const rule of category.rules) ruleOverrides.set(rule.code, "on");
+  } else if (phase === "deselected") {
+    categorySelected.delete(category.key);
+    for (const rule of category.rules) ruleOverrides.set(rule.code, "off");
+  } else {
+    categorySelected.delete(category.key);
+    for (const rule of category.rules) ruleOverrides.delete(rule.code);
   }
 }
