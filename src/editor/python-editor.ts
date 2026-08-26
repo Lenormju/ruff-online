@@ -1,10 +1,14 @@
 import { basicSetup, EditorView } from "codemirror";
 import { python } from "@codemirror/lang-python";
 
-export function createPythonEditor(parent: HTMLElement, doc: string): EditorView {
+export function createPythonEditor(parent: HTMLElement, doc: string, onChange?: () => void): EditorView {
   return new EditorView({
     doc,
-    extensions: [basicSetup, python()],
+    extensions: [
+      basicSetup,
+      python(),
+      ...(onChange ? [EditorView.updateListener.of((update) => update.docChanged && onChange())] : []),
+    ],
     parent,
   });
 }

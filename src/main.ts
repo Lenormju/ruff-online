@@ -5,6 +5,8 @@ import { createTomlEditor } from "./editor/toml-editor";
 import { tomlToOptions } from "./config/toml-options";
 import { formatDiagnostic, renderDiagnostics } from "./ui/diagnostics-panel";
 import { renderDiff } from "./ui/diff-view";
+import { createUrlSync, loadInitialState } from "./state/app-state";
+import type { AppState } from "./state/url-state";
 
 const editorContainer = document.querySelector<HTMLDivElement>("#editor-container")!;
 const tomlContainer = document.querySelector<HTMLDivElement>("#toml-container")!;
@@ -17,14 +19,16 @@ const resultsList = document.querySelector<HTMLUListElement>("#results")!;
 const errorBanner = document.querySelector<HTMLDivElement>("#error-banner")!;
 const diffView = document.querySelector<HTMLDivElement>("#diff-view")!;
 const collapseUnchangedToggle = document.querySelector<HTMLInputElement>("#collapse-unchanged-toggle")!;
+const urlWarning = document.querySelector<HTMLDivElement>("#url-warning")!;
 
-const editor = createPythonEditor(editorContainer, "import os");
+const defaultCode = "import os";
 // An empty [tool.ruff] table means Ruff's defaults — nothing is silently
 // already in force until Check is clicked.
-const tomlEditor = createTomlEditor(
-  tomlContainer,
-  ["[tool.ruff]", "# line-length = 88", '# lint.select = ["E", "F"]', ""].join("\n"),
-);
+const defaultToml = ["[tool.ruff]", "# line-length = 88", '# lint.select = ["E", "F"]', ""].join("\n");
+
+// Read once, at initial load only — never re-applied on a later `hashchange`
+// while the user is editing (see PLAN.md Phase 5's hard UX rule).
+const initialState = await loadInitialState(location.hash);
 
 let versions: VersionEntry[] = [];
 let currentEntry: VersionEntry | null = null;
@@ -33,9 +37,34 @@ let diffBefore: string | null = null;
 let diffAfter: string | null = null;
 let diffEditorView: ReturnType<typeof renderDiff> | null = null;
 
+// Reassigned once `urlSync` exists below; editors are created first since
+// `getCurrentAppState` reads from them, and both directions need each other.
+let notifyUrlSync: () => void = () => {};
+
+const editor = createPythonEditor(editorContainer, initialState?.code ?? defaultCode, () => notifyUrlSync());
+const tomlEditor = createTomlEditor(tomlContainer, initialState?.toml ?? defaultToml, () => notifyUrlSync());
+
+function getCurrentAppState(): AppState {
+  return {
+    version: currentEntry?.version ?? "",
+    code: editor.state.doc.toString(),
+    toml: tomlEditor.state.doc.toString(),
+  };
+}
+
+function handleUrlEncoded(hash: string, exceedsSoftCap: boolean) {
+  history.replaceState(null, "", "#" + hash);
+  urlWarning.style.display = exceedsSoftCap ? "block" : "none";
+}
+
+const urlSync = createUrlSync(getCurrentAppState, handleUrlEncoded);
+notifyUrlSync = () => urlSync.notifyChange();
+
 async function initVersions() {
   versions = await getVersions();
   const latest = await getLatestVersion();
+  const preferred = initialState ? versions.find((entry) => entry.version === initialState.version) : undefined;
+  const initial = preferred ?? latest;
 
   versionSelect.replaceChildren(
     ...versions.map((entry) => {
@@ -45,12 +74,13 @@ async function initVersions() {
       return option;
     }),
   );
-  versionSelect.value = latest.version;
-  currentEntry = latest;
+  versionSelect.value = initial.version;
+  currentEntry = initial;
 }
 
 versionSelect.addEventListener("change", () => {
   currentEntry = versions.find((entry) => entry.version === versionSelect.value) ?? null;
+  notifyUrlSync();
 });
 
 void initVersions();

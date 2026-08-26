@@ -78,6 +78,16 @@
         border: 1px solid #d9a300;
         color: #7a5600;
       }
+      #url-warning {
+        display: none;
+        padding: 0.5rem 0.75rem;
+        border-radius: 4px;
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        background: #fff8e0;
+        border: 1px solid #d9a300;
+        color: #7a5600;
+      }
       #diff-view:empty {
         display: none;
       }
@@ -97,6 +107,10 @@
       <button id="format-button">Format</button>
       <button id="apply-button">Apply</button>
     </p>
+    <div id="url-warning">
+      This page's URL is over ~6000 characters — some browsers or link-sharing tools may truncate a shared link
+      this long.
+    </div>
 
     <h2>Configuration</h2>
     <p>
@@ -117,7 +131,7 @@
     <div id="diff-view"></div>
 
     <p><em>
-      Phase 4: Format diff + Apply. Still missing: sharing, Visual/CLI modes.
+      Phase 5: shareable URL state. Still missing: Visual/CLI modes.
     </em></p>
 
     <script type="module" src="/src/main.ts"></script>
