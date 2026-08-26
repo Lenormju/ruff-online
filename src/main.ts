@@ -11,8 +11,10 @@ import {
   visualOptionsToTomlText,
   type Mode,
 } from "./config/options";
+import { buildRulesIndex, loadRules, type RulesIndex } from "./config/rules-data";
 import { tomlToVisualWarning } from "./ui/mode-switch";
 import { createTier1Panel } from "./ui/tier1-panel";
+import { createTier2Panel } from "./ui/tier2-panel";
 import { createTier3Panel } from "./ui/tier3-panel";
 import { formatDiagnostic, renderDiagnostics } from "./ui/diagnostics-panel";
 import { renderDiff } from "./ui/diff-view";
@@ -23,6 +25,7 @@ const editorContainer = document.querySelector<HTMLDivElement>("#editor-containe
 const tomlContainer = document.querySelector<HTMLDivElement>("#toml-container")!;
 const visualContainer = document.querySelector<HTMLDivElement>("#visual-container")!;
 const tier1Container = document.querySelector<HTMLDivElement>("#tier1-container")!;
+const tier2Container = document.querySelector<HTMLDivElement>("#tier2-container")!;
 const tier3Container = document.querySelector<HTMLDivElement>("#tier3-container")!;
 const modeTomlRadio = document.querySelector<HTMLInputElement>("#mode-toml")!;
 const modeVisualRadio = document.querySelector<HTMLInputElement>("#mode-visual")!;
@@ -55,6 +58,12 @@ let diffBefore: string | null = null;
 let diffAfter: string | null = null;
 let diffEditorView: ReturnType<typeof renderDiff> | null = null;
 
+// Tier 2 (rule selection) is version-dependent — unlike Tier 1/3's static
+// field maps, it needs that version's `rules.json` loaded before it can
+// convert to/from RuffOptions at all. `null` until the first version's
+// rules finish loading (see `loadRulesIndexFor` below).
+let currentRulesIndex: RulesIndex | null = null;
+
 // Which config mode is active — TOML and Visual are never live-synced, only
 // converted into each other on an explicit mode switch (see mode radios
 // below), so both an editor's TOML text and the Visual panels' field values
@@ -69,6 +78,7 @@ const editor = createPythonEditor(editorContainer, initialState?.code ?? default
 const tomlEditor = createTomlEditor(tomlContainer, initialState?.toml ?? defaultToml, () => notifyUrlSync());
 const tier1Panel = createTier1Panel(tier1Container, initialState?.visual.tier1 ?? EMPTY_VISUAL_OPTIONS.tier1, () => notifyUrlSync());
 const tier3Panel = createTier3Panel(tier3Container, initialState?.visual.tier3 ?? EMPTY_VISUAL_OPTIONS.tier3, () => notifyUrlSync());
+const tier2Panel = createTier2Panel(tier2Container, initialState?.visual.tier2 ?? EMPTY_VISUAL_OPTIONS.tier2, () => notifyUrlSync());
 
 function applyModeUI() {
   modeTomlRadio.checked = mode === "toml";
@@ -78,10 +88,14 @@ function applyModeUI() {
 }
 applyModeUI();
 
+function currentVisualOptions() {
+  return { tier1: tier1Panel.get(), tier3: tier3Panel.get(), tier2: tier2Panel.get() };
+}
+
 /** The options the active mode currently represents — feeds Check/Format. */
 function currentOptionsResult(): TomlOptionsResult {
   if (mode === "toml") return tomlToOptions(tomlEditor.state.doc.toString());
-  return { ok: true, options: visualOptionsToRuffOptions({ tier1: tier1Panel.get(), tier3: tier3Panel.get() }), hasRuffTable: true };
+  return { ok: true, options: visualOptionsToRuffOptions(currentVisualOptions(), currentRulesIndex), hasRuffTable: true };
 }
 
 function getCurrentAppState(): AppState {
@@ -90,7 +104,7 @@ function getCurrentAppState(): AppState {
     mode,
     code: editor.state.doc.toString(),
     toml: tomlEditor.state.doc.toString(),
-    visual: { tier1: tier1Panel.get(), tier3: tier3Panel.get() },
+    visual: currentVisualOptions(),
   };
 }
 
@@ -105,18 +119,33 @@ notifyUrlSync = () => urlSync.notifyChange();
 /** Every native control that affects `AppState` beyond an editor's/panel's own
  * constructor-time `onChange` must go through this — the deliberate fix for
  * Phase 5's flagged gap where a raw `addEventListener` could silently forget
- * the trailing `notifyUrlSync()` call. */
-function wireStateControl(target: EventTarget, event: string, handler: () => void) {
+ * the trailing `notifyUrlSync()` call. Handlers may be async (e.g. `switchMode`,
+ * which may need to wait for a version's `rules.json` to load); `notifyUrlSync`
+ * only fires once the handler's own work — and thus the state it reads — is settled. */
+function wireStateControl(target: EventTarget, event: string, handler: () => void | Promise<void>) {
   target.addEventListener(event, () => {
-    handler();
-    notifyUrlSync();
+    void (async () => {
+      await handler();
+      notifyUrlSync();
+    })();
   });
 }
 
 wireStateControl(modeTomlRadio, "change", () => switchMode("toml"));
 wireStateControl(modeVisualRadio, "change", () => switchMode("visual"));
 
-function switchMode(target: Mode) {
+/** Loads (and caches) a version's rules index, applying it to Tier 2 only if that version is still the active one by the time it resolves. */
+async function loadRulesIndexFor(entry: VersionEntry): Promise<RulesIndex> {
+  const rules = await loadRules(entry.rulesPath);
+  const index = buildRulesIndex(rules);
+  if (currentEntry?.version === entry.version) {
+    currentRulesIndex = index;
+    tier2Panel.setRulesIndex(index);
+  }
+  return index;
+}
+
+async function switchMode(target: Mode) {
   if (target === mode) return;
 
   if (mode === "toml" && target === "visual") {
@@ -126,7 +155,13 @@ function switchMode(target: Mode) {
       showConfigParseError(result.message);
       return;
     }
-    const warning = tomlToVisualWarning(result.options);
+    if (!currentEntry) {
+      applyModeUI();
+      showError("No Ruff version selected yet.");
+      return;
+    }
+    const rulesIndex = currentRulesIndex ?? (await loadRulesIndexFor(currentEntry));
+    const warning = tomlToVisualWarning(result.options, rulesIndex);
     if (warning !== null && !confirm(`${warning}\n\nContinue?`)) {
       applyModeUI();
       return;
@@ -134,16 +169,16 @@ function switchMode(target: Mode) {
     clearOutput();
     clearConfigStatus();
     clearDiff();
-    const { visual } = ruffOptionsToVisualOptions(result.options);
+    const { visual } = ruffOptionsToVisualOptions(result.options, rulesIndex);
     tier1Panel.set(visual.tier1);
     tier3Panel.set(visual.tier3);
+    tier2Panel.set(visual.tier2);
   } else {
-    // Visual -> TOML is never lossy: Tier 1+3 alone can't hold anything TOML can't express.
+    // Visual -> TOML is never lossy: Tier 1+2+3 together can't hold anything TOML can't express.
     clearOutput();
     clearConfigStatus();
     clearDiff();
-    const visual = { tier1: tier1Panel.get(), tier3: tier3Panel.get() };
-    replaceContent(tomlEditor, visualOptionsToTomlText(visual));
+    replaceContent(tomlEditor, visualOptionsToTomlText(currentVisualOptions(), currentRulesIndex));
   }
 
   mode = target;
@@ -166,10 +201,12 @@ async function initVersions() {
   );
   versionSelect.value = initial.version;
   currentEntry = initial;
+  void loadRulesIndexFor(initial);
 }
 
 wireStateControl(versionSelect, "change", () => {
   currentEntry = versions.find((entry) => entry.version === versionSelect.value) ?? null;
+  if (currentEntry) void loadRulesIndexFor(currentEntry);
 });
 
 void initVersions();

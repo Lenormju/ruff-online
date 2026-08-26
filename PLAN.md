@@ -403,6 +403,72 @@ real category derivation. In-browser: check "flake8-bugbear", uncheck
 `select=["B"], ignore=["B006"]`, switch to Visual, confirm category B
 checked with B006 shown as a carve-out.
 
+**Status: done.** `src/config/rules-data.ts` (`buildRulesIndex`/`loadRules`),
+`src/config/rule-reconciliation.ts` (`toSelectIgnore`/`pruneOverrides`), and
+`src/config/toml-to-visual.ts` (`lintToVisual`) hold the logic, all TDD'd
+(`test/rules-data.test.ts`, `test/rule-reconciliation.test.ts`,
+`test/toml-to-visual.test.ts`, plus new cases in `test/options.test.ts`).
+`src/ui/tier2-panel.ts` renders one `<details>` per category (a native,
+collapsible, dependency-free tree — no virtualization needed for ~1000
+rules) with a "select all" checkbox and per-rule checkboxes underneath.
+Category derivation groups by `rules.json`'s real `linter` field, as
+planned. `src/main.ts` loads that version's `rules.json` into a
+`RulesIndex` alongside `supported-versions.json` (on initial load and on
+every version switch), threading it through `visualOptionsToRuffOptions`/
+`ruffOptionsToVisualOptions`/`tomlToVisualWarning`/`visualOptionsToTomlText`,
+all now taking a nullable `RulesIndex` parameter (`null` only in the brief
+window before the first version's rules have loaded, in which case Tier 2
+is simply omitted rather than blocking Check/Format). `switchMode` is now
+async to allow waiting for that fetch on a TOML→Visual switch.
+Verified via `pnpm test` (12 files, 101 passing), `tsc -b`, `pnpm build`,
+and a real headless-Chromium pass: checking "flake8-bugbear" then
+unchecking `B006` leaves only `B008` firing on matching code; a Visual→
+TOML→Visual round trip preserves the exact `B006`/`B008` checkbox layout;
+hand-written TOML with `select=["B"], ignore=["B006"]` switches to Visual
+with category B checked and B006 shown as a carve-out; a freshly-loaded
+page shows `F401` pre-checked (Ruff's real per-version default) with
+nothing in `categorySelected`/`ruleOverrides` yet, matching the "baseline"
+rule below.
+
+Two decisions made during implementation that PLAN.md's original text
+didn't anticipate, both confirmed empirically against real `ruff check`
+(not assumed) — documented in code, repeated here since they're
+non-obvious enough to matter for future phases (CLI mode reuses this
+logic per Phase 8's own text):
+
+- **Category → selector-prefix derivation.** The spike's open question
+  ("pylint splits into PLR/PLW/PLC/PLE") resolved as: a `Category`'s
+  identity (`categorySelected`'s key) is the `linter` field itself, but
+  its underlying Ruff selector(s) (`Category.prefixes`) are *every
+  distinct leading-letter run* actually present among its rule codes —
+  usually one value, but two for `pycodestyle` (`E`/`W`) and four for
+  `Pylint` (`PLC`/`PLE`/`PLR`/`PLW`). Confirmed real Ruff accepts each of
+  these individually as a selector; no shorter common-prefix shortcut
+  (e.g. a single `"PL"`) is relied on, even where it happens to also work,
+  since that's not guaranteed for every linter.
+- **`select` replaces defaults; `ignore`/`extend-select` don't.** Empirically
+  confirmed `lint.select = []` disables every rule, including Ruff's own
+  default-enabled set — `select`'s mere *presence* replaces the defaults,
+  it's not additive. This forced `toSelectIgnore` to route a one-off `'on'`
+  override into `extend-select` (not `select`) whenever no category is
+  selected, so enabling one extra default-off rule doesn't silently wipe
+  out every other default-on rule. `ignore` needed no such treatment — it
+  subtracts from whatever's in effect either way. This also shapes the
+  reverse conversion (`toml-to-visual.ts`): when a parsed `[tool.ruff.lint]`
+  table has no `select` key at all, the baseline for every rule is that
+  rule's own `enabled` flag (not `false`), and the conversion back to
+  `categorySelected`/`ruleOverrides` is *exact* (not best-effort) in that
+  case — only the `select`-present branch keeps the spike's original
+  majority-vote ambiguity for ties.
+
+**Known gap, deferred:** a stale `ruleOverrides` entry for a code that no
+longer exists in a newly-selected version's `rules.json` (rule renamed or
+removed between versions) is silently dropped by `pruneOverrides`/
+`toSelectIgnore`, but only the next time either runs (a category toggle,
+or the next Check/Format) — switching versions alone doesn't proactively
+clean it up. Low impact (it's simply excluded from `select`/`ignore` in
+the meantime, never sent to Ruff), not addressed now.
+
 ---
 
 ## Phase 8 — CLI Flags Mode
