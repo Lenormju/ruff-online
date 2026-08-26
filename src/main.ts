@@ -61,6 +61,7 @@ const diffView = document.querySelector<HTMLDivElement>("#diff-view")!;
 const collapseUnchangedToggle = document.querySelector<HTMLInputElement>("#collapse-unchanged-toggle")!;
 const urlWarning = document.querySelector<HTMLDivElement>("#url-warning")!;
 const positionEncodingWarning = document.querySelector<HTMLDivElement>("#position-encoding-warning")!;
+const helpNoticeVersion = document.querySelector<HTMLSpanElement>("#help-notice-version")!;
 
 // Deliberately messy: exercises both Check (F401 unused imports, F541 f-string,
 // E711, E722 all fire under Ruff's default select) and Format (quote/spacing
@@ -316,6 +317,11 @@ function updatePositionEncodingWarning() {
     currentEntry && !supportsUtf16PositionEncoding(currentEntry.version) ? "block" : "none";
 }
 
+/** Keeps the in-app help notice's Ruff version in sync with `currentEntry`. */
+function updateHelpNotice() {
+  helpNoticeVersion.textContent = currentEntry?.version ?? "…";
+}
+
 async function initVersions() {
   versions = await getVersions();
   const latest = await getLatestVersion();
@@ -336,6 +342,7 @@ async function initVersions() {
   versionSelect.setValue(initial.version, true);
   currentEntry = initial;
   updatePositionEncodingWarning();
+  updateHelpNotice();
   void loadRulesIndexFor(initial);
 
   wireStateEmitter(
@@ -343,6 +350,7 @@ async function initVersions() {
     async () => {
       currentEntry = versions.find((entry) => entry.version === versionSelect.getValue()) ?? null;
       updatePositionEncodingWarning();
+      updateHelpNotice();
       if (currentEntry) await loadRulesIndexFor(currentEntry);
     },
   );
@@ -541,6 +549,7 @@ async function resetAll() {
   currentEntry = latest;
   versionSelect.setValue(latest.version, true);
   updatePositionEncodingWarning();
+  updateHelpNotice();
   void loadRulesIndexFor(latest);
 
   await urlSync.flush();

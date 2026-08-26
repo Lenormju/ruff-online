@@ -195,6 +195,16 @@
       #apply-button {
         display: none;
       }
+      #help-notice {
+        margin-top: 2rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid #ddd;
+        color: #666;
+        font-size: 0.85rem;
+      }
+      #help-notice a {
+        color: inherit;
+      }
     </style>
   </head>
   <body>
@@ -273,6 +283,16 @@
     <div id="format-status"></div>
     <div id="diff-view"></div>
 
+    <footer id="help-notice">
+      <p>
+        <a href="https://github.com/Lenormju/ruff-online" target="_blank" rel="noopener">Ruff Online</a>
+        is an open-source, client-side playground for
+        <a href="https://docs.astral.sh/ruff/" target="_blank" rel="noopener">Ruff</a>, the Python
+        linter/formatter — everything runs in your browser via Ruff's official WebAssembly build, no
+        server involved and no code you paste here ever leaves your machine. Currently running Ruff
+        <span id="help-notice-version">…</span>.
+      </p>
+    </footer>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

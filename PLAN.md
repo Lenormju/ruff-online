@@ -779,6 +779,28 @@ small UI element).
 the deployed page shows the help notice with a correct, live GitHub link
 and the current Ruff version.
 
+**Status: done.** `README.md` rewritten with a feature overview, a
+real screenshot (`.github/images/screenshot.png`, captured from a live dev
+server via the Playwright pattern used throughout this project), a
+"Version ingestion" section explaining `supported-versions.json`'s daily
+refresh and its actual current floor (`0.13.2` as ingested, vs. `0.11.1`
+as the code-level capability floor — the two are different and both worth
+stating, since the version list is only ever appended to, never
+backfilled), and a Development section. In-app help notice added as a
+`<footer>` in `index.html` (`#help-notice`, styled as small muted text
+below a top border, links to the GitHub repo and to Ruff's own docs) with
+its Ruff-version span (`#help-notice-version`) kept live via a new
+`updateHelpNotice()` in `src/main.ts`, called at each of the three
+call-sites that already update `currentEntry`/`updatePositionEncodingWarning()`
+(initial load, version-picker change, Reset). No separate
+`src/ui/help-notice.ts` module — the logic is one line, so it lives inline
+in `main.ts` next to its sibling `updatePositionEncodingWarning()`, same
+pattern as `#format-status`/`#config-status`. Verified via `pnpm test`
+(327/327, unchanged — no new pure logic to unit-test), `tsc -b`/`vite
+build`, and a real headless-Chromium pass: help notice text/links present
+from load, version span updates to the real selected version, no console
+errors, screenshot captured for the README from the same session.
+
 ---
 
 ## Summary Table
