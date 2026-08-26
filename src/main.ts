@@ -195,7 +195,7 @@ async function initVersions() {
     ...versions.map((entry) => {
       const option = document.createElement("option");
       option.value = entry.version;
-      option.textContent = entry.version;
+      option.textContent = entry.version === latest.version ? `${entry.version} (latest)` : entry.version;
       return option;
     }),
   );
