@@ -8,7 +8,7 @@ import { renderDiff } from "./ui/diff-view";
 
 const editorContainer = document.querySelector<HTMLDivElement>("#editor-container")!;
 const tomlContainer = document.querySelector<HTMLDivElement>("#toml-container")!;
-const runButton = document.querySelector<HTMLButtonElement>("#run-button")!;
+const checkButton = document.querySelector<HTMLButtonElement>("#check-button")!;
 const formatButton = document.querySelector<HTMLButtonElement>("#format-button")!;
 const applyButton = document.querySelector<HTMLButtonElement>("#apply-button")!;
 const versionSelect = document.querySelector<HTMLSelectElement>("#version-select")!;
@@ -19,7 +19,7 @@ const diffView = document.querySelector<HTMLDivElement>("#diff-view")!;
 
 const editor = createPythonEditor(editorContainer, "import os");
 // An empty [tool.ruff] table means Ruff's defaults — nothing is silently
-// already in force until Run is clicked.
+// already in force until Check is clicked.
 const tomlEditor = createTomlEditor(
   tomlContainer,
   ["[tool.ruff]", "# line-length = 88", '# lint.select = ["E", "F"]', ""].join("\n"),
@@ -91,7 +91,7 @@ function showConfigParseError(message: string) {
   configStatus.style.display = "block";
 }
 
-async function run() {
+async function check() {
   clearOutput();
   clearConfigStatus();
 
@@ -160,8 +160,8 @@ async function format() {
   }
 }
 
-runButton.addEventListener("click", () => {
-  void run();
+checkButton.addEventListener("click", () => {
+  void check();
 });
 
 formatButton.addEventListener("click", () => {

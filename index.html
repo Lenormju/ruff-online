@@ -54,7 +54,7 @@
       /*
        * Deliberately NOT the red #error-banner styling: a TOML syntax error is
        * a third, distinct kind of failure — the config never reached Ruff, so
-       * Run doesn't happen at all.
+       * Ruff is never invoked at all.
        */
       #config-status {
         display: none;
@@ -100,12 +100,12 @@
   </head>
   <body>
     <h1>Ruff Online</h1>
-    <p>Paste Python code and click Run to lint it with Ruff, entirely in your browser.</p>
+    <p>Paste Python code and click Check to lint it with Ruff, entirely in your browser.</p>
 
     <div id="editor-container"></div>
     <p>
       <select id="version-select"></select>
-      <button id="run-button">Run</button>
+      <button id="check-button">Check</button>
       <button id="format-button">Format</button>
       <button id="apply-button">Apply</button>
     </p>
@@ -113,7 +113,7 @@
     <h2>Configuration</h2>
     <p>
       Ruff config in <code>pyproject.toml</code> form. Used automatically
-      whenever you click Run.
+      whenever you click Check.
     </p>
     <div id="toml-container"></div>
     <div id="config-status"></div>

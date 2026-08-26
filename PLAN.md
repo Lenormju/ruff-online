@@ -114,7 +114,7 @@ and `.check()`), `.github/workflows/deploy.yml` (build → `actions/upload-pages
 Actions" (outside any workflow file).
 
 **Verification**: open the deployed Pages URL (not just localhost, to catch
-CORS/MIME/base-path issues), paste `import os`, click Run, see `F401`.
+CORS/MIME/base-path issues), paste `import os`, click Check, see `F401`.
 Paste unbalanced parens, confirm the red banner (not a crash or empty list).
 
 **Missing after this phase**: everything — version choice, any config,
@@ -187,9 +187,9 @@ confirm reload happens and a previously-used version loads instantly
 mode-switch machinery needed yet since it's the only mode.
 
 **Adds**: CodeMirror TOML editor (`@codemirror/legacy-modes`), `smol-toml`
-for parsing. Textarea → `Options` parsed fresh on every explicit "Run" click
+for parsing. Textarea → `Options` parsed fresh on every explicit "Check" click
 (not live per-keystroke, consistent with the consent rule) — no separate
-"Apply"/staging step; whatever TOML is in the editor at the moment Run is
+"Apply"/staging step; whatever TOML is in the editor at the moment Check is
 clicked is what's used. `Options` fed straight into `Workspace` construction,
 replacing Phase 0's hardcoded defaults.
 
@@ -199,7 +199,7 @@ replacing Phase 0's hardcoded defaults.
 run Check against a long line, confirm `E501` (Ruff's default
 `lint.select` — `E4,E7,E9,F` — excludes `E5`, so `line-length` alone has no
 observable effect; `select` must include `E`/`E501` to exercise it). Paste
-malformed TOML and click Run, confirm a clear parse-error message (distinct
+malformed TOML and click Check, confirm a clear parse-error message (distinct
 from a Ruff diagnostic or a Ruff exception) and that Ruff is not invoked.
 
 ---
