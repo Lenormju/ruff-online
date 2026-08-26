@@ -30,13 +30,22 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
     return rule.enabled;
   }
 
+  /** Sets the category checkbox's checked/indeterminate state from how many of its rules are effectively on — fully checked, fully unchecked, or a native tri-state "partial" dash for anything in between. */
+  function updateCategoryCheckbox(checkbox: HTMLInputElement, category: Category): void {
+    const onCount = category.rules.filter(effectiveOn).length;
+    checkbox.checked = onCount === category.rules.length;
+    checkbox.indeterminate = onCount > 0 && onCount < category.rules.length;
+  }
+
   function renderCategory(category: Category): HTMLElement {
     const ruleCheckboxes = new Map<string, HTMLInputElement>();
 
     const categoryCheckbox = document.createElement("input");
     categoryCheckbox.type = "checkbox";
-    categoryCheckbox.checked = categorySelected.has(category.key);
+    updateCategoryCheckbox(categoryCheckbox, category);
     categoryCheckbox.addEventListener("change", () => {
+      // Clicking a partial (indeterminate) checkbox always lands on checked=true
+      // (native browser behavior) — i.e. "select the rest of this category".
       if (categoryCheckbox.checked) categorySelected.add(category.key);
       else categorySelected.delete(category.key);
       if (index) pruneOverrides(index, categorySelected, ruleOverrides);
@@ -44,6 +53,7 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
         const checkbox = ruleCheckboxes.get(rule.code);
         if (checkbox) checkbox.checked = effectiveOn(rule);
       }
+      updateCategoryCheckbox(categoryCheckbox, category);
       onChange();
     });
 
@@ -60,6 +70,7 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
         const baselineOn = categorySelected.has(category.key) ? true : rule.enabled;
         if (checkbox.checked === baselineOn) ruleOverrides.delete(rule.code);
         else ruleOverrides.set(rule.code, checkbox.checked ? "on" : "off");
+        updateCategoryCheckbox(categoryCheckbox, category);
         onChange();
       });
       ruleCheckboxes.set(rule.code, checkbox);
