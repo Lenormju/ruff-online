@@ -80,4 +80,43 @@ describe("createUrlSync", () => {
     const [, exceedsSoftCap] = onEncoded.mock.calls[0]!;
     expect(exceedsSoftCap).toBe(true);
   });
+
+  test("flush() encodes and calls back immediately, without waiting for the debounce delay", async () => {
+    const state: AppState = { version: "0.16.4", code: "x = 1\n", toml: "" };
+    const onEncoded = vi.fn();
+    const sync = createUrlSync(() => state, onEncoded, 10_000);
+
+    await sync.flush();
+
+    expect(onEncoded).toHaveBeenCalledTimes(1);
+    const [hash] = onEncoded.mock.calls[0]!;
+    const { decodeState } = await import("../src/state/url-state");
+    expect(await decodeState(hash)).toEqual(state);
+  });
+
+  test("flush() cancels a pending debounced call, so it doesn't also fire later", async () => {
+    const state: AppState = { version: "0.16.4", code: "x = 1\n", toml: "" };
+    const onEncoded = vi.fn();
+    const sync = createUrlSync(() => state, onEncoded, 50);
+
+    sync.notifyChange();
+    await sync.flush();
+    await sleep(100);
+
+    expect(onEncoded).toHaveBeenCalledTimes(1);
+  });
+
+  test("flush() reflects the latest state, not a stale pending one", async () => {
+    let current: AppState = { version: "0.16.4", code: "a", toml: "" };
+    const onEncoded = vi.fn();
+    const sync = createUrlSync(() => current, onEncoded, 10_000);
+
+    sync.notifyChange();
+    current = { version: "0.16.4", code: "b", toml: "" };
+    await sync.flush();
+
+    const [hash] = onEncoded.mock.calls[0]!;
+    const { decodeState } = await import("../src/state/url-state");
+    expect(await decodeState(hash)).toEqual(current);
+  });
 });

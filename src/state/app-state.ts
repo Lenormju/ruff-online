@@ -16,6 +16,8 @@ export async function loadInitialState(hash: string): Promise<AppState | null> {
 export interface UrlSync {
   /** Call after any state-affecting change (an edit, a version switch). Debounced. */
   notifyChange(): void;
+  /** Encodes and calls back immediately, bypassing the debounce — e.g. for a "Copy link" click, where waiting out the delay would risk copying stale state. Cancels any pending debounced call. */
+  flush(): Promise<void>;
 }
 
 /**
@@ -31,15 +33,22 @@ export function createUrlSync(
 ): UrlSync {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
+  async function encodeAndEmit() {
+    const hash = await encodeState(getState());
+    onEncoded(hash, hash.length > SOFT_CAP_CHARS);
+  }
+
   return {
     notifyChange() {
       if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(() => {
-        void (async () => {
-          const hash = await encodeState(getState());
-          onEncoded(hash, hash.length > SOFT_CAP_CHARS);
-        })();
-      }, delayMs);
+      timer = setTimeout(() => void encodeAndEmit(), delayMs);
+    },
+    async flush() {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      await encodeAndEmit();
     },
   };
 }

@@ -13,6 +13,7 @@ const tomlContainer = document.querySelector<HTMLDivElement>("#toml-container")!
 const checkButton = document.querySelector<HTMLButtonElement>("#check-button")!;
 const formatButton = document.querySelector<HTMLButtonElement>("#format-button")!;
 const applyButton = document.querySelector<HTMLButtonElement>("#apply-button")!;
+const copyLinkButton = document.querySelector<HTMLButtonElement>("#copy-link-button")!;
 const versionSelect = document.querySelector<HTMLSelectElement>("#version-select")!;
 const configStatus = document.querySelector<HTMLDivElement>("#config-status")!;
 const resultsList = document.querySelector<HTMLUListElement>("#results")!;
@@ -225,3 +226,24 @@ applyButton.addEventListener("click", () => {
 collapseUnchangedToggle.addEventListener("change", () => {
   showDiff();
 });
+
+copyLinkButton.addEventListener("click", () => {
+  void copyLink();
+});
+
+async function copyLink() {
+  // Flush rather than rely on the debounced sync, so the copied link never
+  // lags behind an edit made just before the click.
+  await urlSync.flush();
+  try {
+    await navigator.clipboard.writeText(location.href);
+  } catch (error) {
+    showError(error);
+    return;
+  }
+  const originalLabel = copyLinkButton.textContent;
+  copyLinkButton.textContent = "Copied!";
+  setTimeout(() => {
+    copyLinkButton.textContent = originalLabel;
+  }, 1500);
+}
