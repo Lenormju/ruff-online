@@ -68,7 +68,7 @@ let currentRulesIndex: RulesIndex | null = null;
 // converted into each other on an explicit mode switch (see mode radios
 // below), so both an editor's TOML text and the Visual panels' field values
 // always exist regardless of which one is currently in force.
-let mode: Mode = initialState?.mode ?? "toml";
+let mode: Mode = initialState?.mode ?? "visual";
 
 // Reassigned once `urlSync` exists below; editors are created first since
 // `getCurrentAppState` reads from them, and both directions need each other.

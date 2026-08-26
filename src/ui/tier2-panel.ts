@@ -58,7 +58,7 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
     });
 
     const summary = document.createElement("summary");
-    summary.append(categoryCheckbox, ` ${category.key} (${category.rules.length})`);
+    summary.append(categoryCheckbox, ` ${category.key} (${category.prefixes.join("/")}) (${category.rules.length})`);
 
     const list = document.createElement("ul");
     for (const rule of category.rules) {
