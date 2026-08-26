@@ -1,6 +1,6 @@
+import { isSelectedByCategory, pruneOverrides } from "../config/rule-reconciliation";
 import type { Tier2Options } from "../config/options";
-import { pruneOverrides } from "../config/rule-reconciliation";
-import type { Category, Rule, RulesIndex } from "../config/rules-data";
+import { ALL_CATEGORY_KEY, type Category, type Rule, type RulesIndex } from "../config/rules-data";
 import type { Panel } from "./form-controls";
 
 export interface Tier2Panel extends Panel<Tier2Options> {
@@ -9,8 +9,10 @@ export interface Tier2Panel extends Panel<Tier2Options> {
 }
 
 /**
- * Renders Visual mode's Tier 2 (rule selection) fields: one `<details>` per
- * category with a "select all" checkbox, and one checkbox per rule inside.
+ * Renders Visual mode's Tier 2 (rule selection) fields: a standalone `ALL`
+ * toggle (Ruff's own catch-all selector — see `rules-data.ts`) above one
+ * `<details>` per real category, each with its own "select all" checkbox
+ * and one checkbox per rule inside.
  *
  * Unlike Tier 1/3, this panel's contents are version-dependent — it starts
  * empty and only has anything to render once `setRulesIndex` is called
@@ -22,30 +24,71 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
   let categorySelected = new Set(initial.categorySelected);
   let ruleOverrides = new Map(initial.ruleOverrides);
 
-  /** The checked state to show for a rule before any override — category selection, else this version's own default. */
+  // Populated fresh on every render() — every rule checkbox by code, and
+  // every category's (checkbox, countLabel, category) triple, so a change
+  // to one category or to the top-level ALL toggle can refresh every other
+  // header/checkbox it affects without a full re-render (which would also
+  // collapse any <details> the user had open).
+  let ruleCheckboxesByCode = new Map<string, HTMLInputElement>();
+  let categoryHeaders: Array<{ checkbox: HTMLInputElement; countLabel: HTMLElement; category: Category }> = [];
+  let allHeader: { checkbox: HTMLInputElement; countLabel: HTMLElement } | null = null;
+
+  /** The checked state to show for a rule before any override — category (or ALL) selection, else this version's own default. */
   function effectiveOn(rule: Rule): boolean {
     const override = ruleOverrides.get(rule.code);
     if (override !== undefined) return override === "on";
-    if (categorySelected.has(rule.linter)) return true;
+    if (isSelectedByCategory(categorySelected, rule)) return true;
     return rule.enabled;
   }
 
   /**
-   * Updates the category checkbox's checked/indeterminate state (fully
-   * checked, fully unchecked, or a native tri-state "partial" dash) and the
-   * "N/total selected" count label, both from how many of its rules are
-   * currently effectively on.
+   * Updates a header's checkbox checked/indeterminate state (fully checked,
+   * fully unchecked, or a native tri-state "partial" dash) and its
+   * "N/total selected" count label, both from how many of `rules` are
+   * currently effectively on. Used for both real categories and the
+   * top-level ALL toggle (whose `rules` is the entire rule set).
    */
-  function updateCategoryHeader(checkbox: HTMLInputElement, countLabel: HTMLElement, category: Category): void {
-    const onCount = category.rules.filter(effectiveOn).length;
-    checkbox.checked = onCount === category.rules.length;
-    checkbox.indeterminate = onCount > 0 && onCount < category.rules.length;
-    countLabel.textContent = `(${onCount}/${category.rules.length})`;
+  function updateHeader(checkbox: HTMLInputElement, countLabel: HTMLElement, rules: Rule[]): void {
+    const onCount = rules.filter(effectiveOn).length;
+    checkbox.checked = onCount === rules.length;
+    checkbox.indeterminate = onCount > 0 && onCount < rules.length;
+    countLabel.textContent = `(${onCount}/${rules.length})`;
+  }
+
+  /** Refreshes every rendered header/checkbox after any state change, wherever it originated. */
+  function refreshAll(): void {
+    for (const [code, checkbox] of ruleCheckboxesByCode) {
+      const rule = index?.byCode.get(code);
+      if (rule) checkbox.checked = effectiveOn(rule);
+    }
+    for (const { checkbox, countLabel, category } of categoryHeaders) {
+      updateHeader(checkbox, countLabel, category.rules);
+    }
+    if (allHeader && index) updateHeader(allHeader.checkbox, allHeader.countLabel, index.rules);
+  }
+
+  function renderAllToggle(rules: Rule[]): HTMLElement {
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    const countLabel = document.createElement("span");
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) categorySelected.add(ALL_CATEGORY_KEY);
+      else categorySelected.delete(ALL_CATEGORY_KEY);
+      if (index) pruneOverrides(index, categorySelected, ruleOverrides);
+      refreshAll();
+      onChange();
+    });
+    allHeader = { checkbox, countLabel };
+
+    const label = document.createElement("label");
+    label.append(checkbox, ` ${ALL_CATEGORY_KEY} — every rule `, countLabel);
+    const row = document.createElement("p");
+    row.append(label);
+    updateHeader(checkbox, countLabel, rules);
+    return row;
   }
 
   function renderCategory(category: Category): HTMLElement {
-    const ruleCheckboxes = new Map<string, HTMLInputElement>();
-
     const categoryCheckbox = document.createElement("input");
     categoryCheckbox.type = "checkbox";
     const countLabel = document.createElement("span");
@@ -55,17 +98,14 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
       if (categoryCheckbox.checked) categorySelected.add(category.key);
       else categorySelected.delete(category.key);
       if (index) pruneOverrides(index, categorySelected, ruleOverrides);
-      for (const rule of category.rules) {
-        const checkbox = ruleCheckboxes.get(rule.code);
-        if (checkbox) checkbox.checked = effectiveOn(rule);
-      }
-      updateCategoryHeader(categoryCheckbox, countLabel, category);
+      refreshAll();
       onChange();
     });
+    categoryHeaders.push({ checkbox: categoryCheckbox, countLabel, category });
 
     const summary = document.createElement("summary");
     summary.append(categoryCheckbox, ` ${category.prefixes.join("/")} — ${category.key} `, countLabel);
-    updateCategoryHeader(categoryCheckbox, countLabel, category);
+    updateHeader(categoryCheckbox, countLabel, category.rules);
 
     const list = document.createElement("ul");
     for (const rule of category.rules) {
@@ -74,13 +114,13 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
       checkbox.checked = effectiveOn(rule);
       checkbox.title = rule.summary;
       checkbox.addEventListener("change", () => {
-        const baselineOn = categorySelected.has(category.key) ? true : rule.enabled;
+        const baselineOn = isSelectedByCategory(categorySelected, rule) ? true : rule.enabled;
         if (checkbox.checked === baselineOn) ruleOverrides.delete(rule.code);
         else ruleOverrides.set(rule.code, checkbox.checked ? "on" : "off");
-        updateCategoryHeader(categoryCheckbox, countLabel, category);
+        refreshAll();
         onChange();
       });
-      ruleCheckboxes.set(rule.code, checkbox);
+      ruleCheckboxesByCode.set(rule.code, checkbox);
 
       const label = document.createElement("label");
       label.append(checkbox, ` ${rule.code} — ${rule.name}`);
@@ -95,12 +135,18 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
   }
 
   function render(): void {
+    ruleCheckboxesByCode = new Map();
+    categoryHeaders = [];
+    allHeader = null;
+
     if (!index) {
       container.replaceChildren();
       return;
     }
-    const categories = [...index.categories].sort((a, b) => a.key.localeCompare(b.key));
-    container.replaceChildren(...categories.map(renderCategory));
+    const realCategories = index.categories
+      .filter((category) => category.key !== ALL_CATEGORY_KEY)
+      .sort((a, b) => a.key.localeCompare(b.key));
+    container.replaceChildren(renderAllToggle(index.rules), ...realCategories.map(renderCategory));
   }
 
   function get(): Tier2Options {

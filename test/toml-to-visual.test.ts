@@ -86,4 +86,32 @@ describe("lintToVisual", () => {
       expect(result.ruleOverrides.size).toBe(0);
     });
   });
+
+  describe("ALL (Ruff's own catch-all selector)", () => {
+    test("select=['ALL'] resolves to just the ALL category selected, no per-rule overrides", () => {
+      const result = lintToVisual(index, { select: ["ALL"] });
+      expect([...result.categorySelected]).toEqual(["ALL"]);
+      expect(result.ruleOverrides.size).toBe(0);
+    });
+
+    test("extend-select=['ALL'] on top of defaults also collapses to just the ALL category", () => {
+      const result = lintToVisual(index, { "extend-select": ["ALL"] });
+      expect([...result.categorySelected]).toEqual(["ALL"]);
+      expect(result.ruleOverrides.size).toBe(0);
+    });
+
+    test("a more specific ignore alongside select=['ALL'] is NOT full coverage, so it falls back to the per-category heuristic rather than claiming ALL", () => {
+      const result = lintToVisual(index, { select: ["ALL"], ignore: ["B006"] });
+      expect(result.categorySelected.has("ALL")).toBe(false);
+      expect(result.ruleOverrides.get("B008")).toBe("on");
+    });
+
+    test("round-trips exactly through toSelectIgnore", () => {
+      const encoded = toSelectIgnore(index, new Set(["ALL"]), new Map());
+      expect(encoded).toEqual({ select: ["ALL"] });
+      const back = lintToVisual(index, { select: encoded.select });
+      expect([...back.categorySelected]).toEqual(["ALL"]);
+      expect(back.ruleOverrides.size).toBe(0);
+    });
+  });
 });

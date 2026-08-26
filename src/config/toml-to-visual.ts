@@ -1,5 +1,5 @@
 import type { CategorySelected, RuleOverrides } from "./rule-reconciliation";
-import type { RulesIndex } from "./rules-data";
+import { ALL_CATEGORY_KEY, type RulesIndex } from "./rules-data";
 
 /** The shape of a parsed `[tool.ruff.lint]` table, as far as this conversion cares. */
 export interface LintSelectors {
@@ -14,8 +14,15 @@ export interface Tier2State {
   ruleOverrides: RuleOverrides;
 }
 
+/** Exact code > longer prefix > shorter prefix > `ALL` (the least specific selector there is). */
 function specificity(index: RulesIndex, selector: string): number {
-  return index.byCode.has(selector) ? 1000 : selector.length;
+  if (index.byCode.has(selector)) return 1000;
+  if (selector === ALL_CATEGORY_KEY) return -1;
+  return selector.length;
+}
+
+function selectorMatches(selector: string, ruleCode: string): boolean {
+  return selector === ALL_CATEGORY_KEY || selector === ruleCode || ruleCode.startsWith(selector);
 }
 
 /**
@@ -44,7 +51,7 @@ function resolveEnabled(index: RulesIndex, lint: LintSelectors): Map<string, boo
 
   const result = new Map<string, boolean>();
   for (const rule of index.rules) {
-    const matches = allSelectors.filter(({ sel }) => sel === rule.code || rule.code.startsWith(sel));
+    const matches = allSelectors.filter(({ sel }) => selectorMatches(sel, rule.code));
     if (matches.length === 0) {
       result.set(rule.code, hasSelect ? false : rule.enabled);
       continue;
@@ -71,8 +78,19 @@ function resolveEnabled(index: RulesIndex, lint: LintSelectors): Map<string, boo
  *     exact on/off tie) — resolved via majority vote, conservatively leaving
  *     a tied category unchecked. Preserves the *resolved rule set* exactly;
  *     the exact checkbox layout is only guaranteed for a clear majority.
+ *
+ * Either way, if literally every rule resolves on (e.g. a hand-written
+ * `select = ["ALL"]`, or `extend-select = ["ALL"]` on top of defaults),
+ * that's represented as just `categorySelected = {ALL_CATEGORY_KEY}` rather
+ * than every individual category happening to hit its own majority vote —
+ * cleaner, and it's what `toSelectIgnore` would itself produce for "select
+ * everything" (re-encodes as `select: ["ALL"]`, not one prefix per category).
  */
 function uiStateFromResolved(index: RulesIndex, resolved: Map<string, boolean>, hasSelect: boolean): Tier2State {
+  if (index.rules.length > 0 && index.rules.every((rule) => resolved.get(rule.code))) {
+    return { categorySelected: new Set([ALL_CATEGORY_KEY]), ruleOverrides: new Map() };
+  }
+
   const categorySelected: CategorySelected = new Set();
   const ruleOverrides: RuleOverrides = new Map();
 
@@ -85,6 +103,7 @@ function uiStateFromResolved(index: RulesIndex, resolved: Map<string, boolean>, 
   }
 
   for (const category of index.categories) {
+    if (category.key === ALL_CATEGORY_KEY) continue; // only ever selected via the full-coverage shortcut above
     const onCount = category.rules.filter((rule) => resolved.get(rule.code)).length;
     const offCount = category.rules.length - onCount;
     if (onCount > offCount) categorySelected.add(category.key);

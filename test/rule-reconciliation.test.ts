@@ -62,6 +62,22 @@ describe("toSelectIgnore", () => {
     const result = toSelectIgnore(index, new Set(), new Map([["Z999", "on"]]));
     expect(result).toEqual({});
   });
+
+  test("ALL checked -> select: ['ALL']", () => {
+    const result = toSelectIgnore(index, new Set(["ALL"]), new Map());
+    expect(result).toEqual({ select: ["ALL"] });
+  });
+
+  test("ALL checked + one rule carved out -> select ALL, ignore the carve-out", () => {
+    const result = toSelectIgnore(index, new Set(["ALL"]), new Map([["B006", "off"]]));
+    expect(result).toEqual({ select: ["ALL"], ignore: ["B006"] });
+  });
+
+  test("ALL checked makes every other category's rules redundant to override 'on'", () => {
+    // F401 is already on via ALL, so an 'on' override for it is a no-op.
+    const result = toSelectIgnore(index, new Set(["ALL"]), new Map([["F401", "on"]]));
+    expect(result).toEqual({ select: ["ALL"] });
+  });
 });
 
 describe("pruneOverrides", () => {
@@ -84,5 +100,12 @@ describe("pruneOverrides", () => {
     const ruleOverrides = new Map<string, "on" | "off">([["Z999", "on"]]);
     pruneOverrides(index, new Set(), ruleOverrides);
     expect(ruleOverrides.has("Z999")).toBe(false);
+  });
+
+  test("drops a redundant 'on' override once ALL gets checked", () => {
+    const categorySelected = new Set(["ALL"]);
+    const ruleOverrides = new Map<string, "on" | "off">([["F401", "on"]]);
+    pruneOverrides(index, categorySelected, ruleOverrides);
+    expect(ruleOverrides.has("F401")).toBe(false);
   });
 });

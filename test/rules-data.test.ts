@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildRulesIndex, type Rule } from "../src/config/rules-data";
+import { ALL_CATEGORY_KEY, buildRulesIndex, type Rule } from "../src/config/rules-data";
 
 const RULES: Rule[] = [
   { code: "E501", name: "line-too-long", linter: "pycodestyle", summary: "", fixable: false, preview: false, enabled: false },
@@ -19,10 +19,17 @@ describe("buildRulesIndex", () => {
     expect(index.byCode.get("Z999")).toBeUndefined();
   });
 
-  test("groups rules into categories by their linter field", () => {
+  test("groups rules into categories by their linter field, plus a synthetic ALL category", () => {
     const index = buildRulesIndex(RULES);
     const keys = index.categories.map((c) => c.key).sort();
-    expect(keys).toEqual(["Pyflakes", "Pylint", "flake8-bugbear", "pycodestyle"]);
+    expect(keys).toEqual(["ALL", "Pyflakes", "Pylint", "flake8-bugbear", "pycodestyle"]);
+  });
+
+  test("the ALL category spans every rule under a single 'ALL' prefix", () => {
+    const index = buildRulesIndex(RULES);
+    const all = index.categories.find((c) => c.key === ALL_CATEGORY_KEY);
+    expect(all?.rules).toHaveLength(RULES.length);
+    expect(all?.prefixes).toEqual(["ALL"]);
   });
 
   test("a category spanning one prefix reports that single prefix", () => {

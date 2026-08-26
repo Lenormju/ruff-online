@@ -44,6 +44,17 @@ function leadingPrefix(code: string): string {
   return match[0];
 }
 
+/**
+ * Ruff's own catch-all selector — confirmed both on the real `ruff` CLI and
+ * on the `@astral-sh/ruff-wasm-web` npm package (`Workspace` accepts
+ * `{ lint: { select: ["ALL"] } }` without throwing) — selects every rule,
+ * regardless of category. Modeled as a synthetic `Category` whose `rules`
+ * is the entire rule set, so it participates in `rule-reconciliation.ts`'s
+ * selector-prefix expansion for free; rendered as a standalone top-level
+ * toggle rather than a normal collapsible category (see `tier2-panel.ts`).
+ */
+export const ALL_CATEGORY_KEY = "ALL";
+
 /** Builds category/lookup structures from a flat `rules.json` array. */
 export function buildRulesIndex(rules: Rule[]): RulesIndex {
   const byCode = new Map(rules.map((rule) => [rule.code, rule]));
@@ -60,6 +71,7 @@ export function buildRulesIndex(rules: Rule[]): RulesIndex {
     rules: catRules,
     prefixes: [...new Set(catRules.map((rule) => leadingPrefix(rule.code)))].sort(),
   }));
+  categories.push({ key: ALL_CATEGORY_KEY, rules, prefixes: [ALL_CATEGORY_KEY] });
 
   return { rules, categories, byCode };
 }

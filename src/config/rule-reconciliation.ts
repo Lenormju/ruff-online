@@ -1,7 +1,12 @@
-import type { RulesIndex } from "./rules-data";
+import { ALL_CATEGORY_KEY, type Rule, type RulesIndex } from "./rules-data";
 
-/** Categories the user explicitly checked "select all" for. Keyed by `Category.key` (the `linter` field). */
+/** Categories the user explicitly checked "select all" for. Keyed by `Category.key` (the `linter` field, or `ALL_CATEGORY_KEY`). */
 export type CategorySelected = Set<string>;
+
+/** Whether `rule` is on because its own category (or the catch-all `ALL_CATEGORY_KEY`) is explicitly selected. */
+export function isSelectedByCategory(categorySelected: CategorySelected, rule: Rule): boolean {
+  return categorySelected.has(ALL_CATEGORY_KEY) || categorySelected.has(rule.linter);
+}
 
 /**
  * Meaningful per-rule deviations only — never the full resolved set.
@@ -57,7 +62,7 @@ export function toSelectIgnore(
     const rule = index.byCode.get(code);
     if (!rule) continue; // stale override for a code absent from this Ruff version's rules.json
 
-    const baselineOn = categorySelected.has(rule.linter) ? true : rule.enabled;
+    const baselineOn = isSelectedByCategory(categorySelected, rule) ? true : rule.enabled;
     if (state === "off" && baselineOn) {
       ignore.push(code);
     } else if (state === "on" && !baselineOn) {
@@ -89,7 +94,7 @@ export function pruneOverrides(index: RulesIndex, categorySelected: CategorySele
       ruleOverrides.delete(code); // code doesn't exist in this version's rules.json anymore
       continue;
     }
-    const baselineOn = categorySelected.has(rule.linter) ? true : rule.enabled;
+    const baselineOn = isSelectedByCategory(categorySelected, rule) ? true : rule.enabled;
     const stillMeaningful = (state === "off" && baselineOn) || (state === "on" && !baselineOn);
     if (!stillMeaningful) ruleOverrides.delete(code);
   }
