@@ -45,6 +45,7 @@ const checkButton = document.querySelector<HTMLButtonElement>("#check-button")!;
 const formatButton = document.querySelector<HTMLButtonElement>("#format-button")!;
 const applyButton = document.querySelector<HTMLButtonElement>("#apply-button")!;
 const copyLinkButton = document.querySelector<HTMLButtonElement>("#copy-link-button")!;
+const resetButton = document.querySelector<HTMLButtonElement>("#reset-button")!;
 const dumpStateButton = document.querySelector<HTMLButtonElement>("#dump-state-button")!;
 const debugOutput = document.querySelector<HTMLPreElement>("#debug-output")!;
 const versionInput = document.querySelector<HTMLInputElement>("#version-input")!;
@@ -444,10 +445,47 @@ copyLinkButton.addEventListener("click", () => {
   void copyLink();
 });
 
+resetButton.addEventListener("click", () => {
+  void resetAll();
+});
+
 dumpStateButton.addEventListener("click", () => {
   debugOutput.textContent = JSON.stringify(getCurrentAppState(), null, 2);
   debugOutput.style.display = "block";
 });
+
+/** Wipes every edit and reverts to the same defaults a hash-less page load would show — code,
+ * TOML/CLI, Visual selections, mode, and the selected version all go back to their initial
+ * values, and the URL is re-synced to match. Confirms first since this discards unsaved work. */
+async function resetAll() {
+  if (!confirm("Reset everything to defaults? This can't be undone.")) return;
+
+  clearOutput();
+  clearConfigStatus();
+  clearDiff();
+  debugOutput.style.display = "none";
+  debugOutput.textContent = "";
+
+  replaceContent(editor, defaultCode);
+  replaceContent(tomlEditor, defaultToml);
+  replaceContent(cliEditor, defaultCli);
+  updateCliIgnoredNotice();
+
+  tier1Panel.set(EMPTY_VISUAL_OPTIONS.tier1);
+  tier3Panel.set(EMPTY_VISUAL_OPTIONS.tier3);
+  tier2Panel.set(EMPTY_VISUAL_OPTIONS.tier2);
+
+  mode = "visual";
+  applyModeUI();
+
+  const latest = await getLatestVersion();
+  currentEntry = latest;
+  versionInput.value = formatVersionLabel(latest, true);
+  updatePositionEncodingWarning();
+  void loadRulesIndexFor(latest);
+
+  await urlSync.flush();
+}
 
 async function copyLink() {
   // Flush rather than rely on the debounced sync, so the copied link never
