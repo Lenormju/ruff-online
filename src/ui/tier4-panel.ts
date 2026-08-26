@@ -135,6 +135,7 @@ function createFieldControl(spec: Tier4FieldSpec, onChange: () => void): { eleme
  */
 export function createTier4Panel(container: HTMLElement, initial: Tier4Options, onChange: () => void): Tier4Panel {
   const pluginDetails = new Map<string, HTMLDetailsElement>();
+  const pluginSummaries = new Map<string, HTMLElement>();
   const fieldControls = new Map<string, Map<string, FieldControl>>();
 
   for (const plugin of TIER4_SCHEMA) {
@@ -153,6 +154,7 @@ export function createTier4Panel(container: HTMLElement, initial: Tier4Options, 
 
     fieldControls.set(plugin.key, controls);
     pluginDetails.set(plugin.key, details);
+    pluginSummaries.set(plugin.key, summary);
     container.append(details);
   }
 
@@ -184,7 +186,12 @@ export function createTier4Panel(container: HTMLElement, initial: Tier4Options, 
 
   function refreshVisibility(rulesIndex: RulesIndex | null, tier2: Tier2Options): void {
     if (!rulesIndex) {
-      for (const details of pluginDetails.values()) details.hidden = true;
+      for (const plugin of TIER4_SCHEMA) {
+        const details = pluginDetails.get(plugin.key);
+        const summary = pluginSummaries.get(plugin.key);
+        if (details) details.hidden = true;
+        if (summary) summary.textContent = plugin.label;
+      }
       return;
     }
     const categorySelected = new Set(tier2.categorySelected);
@@ -193,8 +200,10 @@ export function createTier4Panel(container: HTMLElement, initial: Tier4Options, 
     for (const plugin of TIER4_SCHEMA) {
       const category = categoryByKey.get(plugin.categoryKey);
       const details = pluginDetails.get(plugin.key);
-      if (!details) continue;
+      const summary = pluginSummaries.get(plugin.key);
+      if (!details || !summary) continue;
       details.hidden = !category || !category.rules.some((rule) => isRuleEffectivelyOn(categorySelected, ruleOverrides, rule));
+      summary.textContent = category ? `${category.prefixes.join("/")} — ${plugin.label}` : plugin.label;
     }
   }
 
