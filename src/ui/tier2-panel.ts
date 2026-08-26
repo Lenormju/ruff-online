@@ -30,11 +30,17 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
     return rule.enabled;
   }
 
-  /** Sets the category checkbox's checked/indeterminate state from how many of its rules are effectively on — fully checked, fully unchecked, or a native tri-state "partial" dash for anything in between. */
-  function updateCategoryCheckbox(checkbox: HTMLInputElement, category: Category): void {
+  /**
+   * Updates the category checkbox's checked/indeterminate state (fully
+   * checked, fully unchecked, or a native tri-state "partial" dash) and the
+   * "N/total selected" count label, both from how many of its rules are
+   * currently effectively on.
+   */
+  function updateCategoryHeader(checkbox: HTMLInputElement, countLabel: HTMLElement, category: Category): void {
     const onCount = category.rules.filter(effectiveOn).length;
     checkbox.checked = onCount === category.rules.length;
     checkbox.indeterminate = onCount > 0 && onCount < category.rules.length;
+    countLabel.textContent = `(${onCount}/${category.rules.length})`;
   }
 
   function renderCategory(category: Category): HTMLElement {
@@ -42,7 +48,7 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
 
     const categoryCheckbox = document.createElement("input");
     categoryCheckbox.type = "checkbox";
-    updateCategoryCheckbox(categoryCheckbox, category);
+    const countLabel = document.createElement("span");
     categoryCheckbox.addEventListener("change", () => {
       // Clicking a partial (indeterminate) checkbox always lands on checked=true
       // (native browser behavior) — i.e. "select the rest of this category".
@@ -53,12 +59,13 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
         const checkbox = ruleCheckboxes.get(rule.code);
         if (checkbox) checkbox.checked = effectiveOn(rule);
       }
-      updateCategoryCheckbox(categoryCheckbox, category);
+      updateCategoryHeader(categoryCheckbox, countLabel, category);
       onChange();
     });
 
     const summary = document.createElement("summary");
-    summary.append(categoryCheckbox, ` ${category.key} (${category.prefixes.join("/")}) (${category.rules.length})`);
+    summary.append(categoryCheckbox, ` ${category.prefixes.join("/")} — ${category.key} `, countLabel);
+    updateCategoryHeader(categoryCheckbox, countLabel, category);
 
     const list = document.createElement("ul");
     for (const rule of category.rules) {
@@ -70,7 +77,7 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
         const baselineOn = categorySelected.has(category.key) ? true : rule.enabled;
         if (checkbox.checked === baselineOn) ruleOverrides.delete(rule.code);
         else ruleOverrides.set(rule.code, checkbox.checked ? "on" : "off");
-        updateCategoryCheckbox(categoryCheckbox, category);
+        updateCategoryHeader(categoryCheckbox, countLabel, category);
         onChange();
       });
       ruleCheckboxes.set(rule.code, checkbox);
