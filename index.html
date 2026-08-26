@@ -12,7 +12,8 @@
         padding: 0 1rem;
       }
       #editor-container,
-      #toml-container {
+      #toml-container,
+      #diff-view:not(:empty) {
         border: 1px solid #ccc;
       }
       #editor-container .cm-editor {
@@ -20,6 +21,10 @@
       }
       #toml-container .cm-editor {
         height: 8rem;
+      }
+      #diff-view .cm-editor {
+        max-height: 24rem;
+        overflow-y: auto;
       }
       .cm-scroller {
         font-family: ui-monospace, monospace;
@@ -73,25 +78,8 @@
         border: 1px solid #d9a300;
         color: #7a5600;
       }
-      #diff-view {
-        font-family: ui-monospace, monospace;
-        font-size: 0.85rem;
-        white-space: pre;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        padding: 0.5rem 0.75rem;
-        overflow-x: auto;
-      }
       #diff-view:empty {
         display: none;
-      }
-      .diff-delete {
-        background: #fee;
-        color: #900;
-      }
-      .diff-insert {
-        background: #efe;
-        color: #262;
       }
       #apply-button {
         display: none;
@@ -123,6 +111,9 @@
     <div id="error-banner"></div>
 
     <h2>Format diff</h2>
+    <p>
+      <label><input type="checkbox" id="collapse-unchanged-toggle" /> Collapse unchanged lines</label>
+    </p>
     <div id="diff-view"></div>
 
     <p><em>

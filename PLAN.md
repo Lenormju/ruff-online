@@ -206,11 +206,17 @@ from a Ruff diagnostic or a Ruff exception) and that Ruff is not invoked.
 
 ## Phase 4 — Format Diff + Apply
 
-**Adds**: "Format" action calling `workspace.format(code)`. Diff view
-(before/after) — a small hand-rolled line-diff (LCS-based) rather than
-adding a diff dependency, consistent with the lightness theme. Explicit
-"Apply" button replaces editor content only on click. Exceptions (can't
-parse) shown via the same red-banner pattern as Check.
+**Adds**: "Format" action calling `workspace.format(code)`. Diff view via
+`@codemirror/merge`'s `unifiedMergeView` — a read-only, throwaway preview
+editor built fresh per Format click, entirely separate from the live Python
+input editor (which is never touched, and stays editable at any time).
+Per-chunk accept/reject controls disabled (`mergeControls: false`); the only
+state-changing action is the single explicit "Apply" button, which replaces
+the real editor's content on click. A "Collapse unchanged lines" checkbox
+toggles `collapseUnchanged` on the preview, off by default; re-renders the
+existing diff immediately without re-running Format (planned to become part
+of persisted page state in Phase 5). Exceptions (can't parse) shown via the
+same red-banner pattern as Check.
 
 **Critical files**: `src/ui/diff-view.ts`, `src/engine/workspace.ts` (add
 `.format()` wrapper).

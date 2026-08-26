@@ -16,6 +16,7 @@ const configStatus = document.querySelector<HTMLDivElement>("#config-status")!;
 const resultsList = document.querySelector<HTMLUListElement>("#results")!;
 const errorBanner = document.querySelector<HTMLDivElement>("#error-banner")!;
 const diffView = document.querySelector<HTMLDivElement>("#diff-view")!;
+const collapseUnchangedToggle = document.querySelector<HTMLInputElement>("#collapse-unchanged-toggle")!;
 
 const editor = createPythonEditor(editorContainer, "import os");
 // An empty [tool.ruff] table means Ruff's defaults — nothing is silently
@@ -28,6 +29,9 @@ const tomlEditor = createTomlEditor(
 let versions: VersionEntry[] = [];
 let currentEntry: VersionEntry | null = null;
 let pendingFormattedCode: string | null = null;
+let diffBefore: string | null = null;
+let diffAfter: string | null = null;
+let diffEditorView: ReturnType<typeof renderDiff> | null = null;
 
 async function initVersions() {
   versions = await getVersions();
@@ -64,9 +68,21 @@ function clearConfigStatus() {
 }
 
 function clearDiff() {
+  diffEditorView?.destroy();
+  diffEditorView = null;
   diffView.replaceChildren();
+  diffBefore = null;
+  diffAfter = null;
   pendingFormattedCode = null;
   applyButton.style.display = "none";
+}
+
+/** Re-renders the diff preview from the last Format result — e.g. when the
+ * collapse-unchanged toggle changes — without re-running Format. */
+function showDiff() {
+  if (diffBefore === null || diffAfter === null) return;
+  diffEditorView?.destroy();
+  diffEditorView = renderDiff(diffView, diffBefore, diffAfter, collapseUnchangedToggle.checked);
 }
 
 function showResults(diagnostics: Awaited<ReturnType<typeof checkCode>>) {
@@ -148,7 +164,9 @@ async function format() {
       currentEntry.wasmUrl,
       result.options,
     );
-    renderDiff(diffView, currentCode, formatted);
+    diffBefore = currentCode;
+    diffAfter = formatted;
+    showDiff();
     if (formatted !== currentCode) {
       pendingFormattedCode = formatted;
       applyButton.style.display = "inline";
@@ -172,4 +190,8 @@ applyButton.addEventListener("click", () => {
   if (pendingFormattedCode === null) return;
   replaceContent(editor, pendingFormattedCode);
   clearDiff();
+});
+
+collapseUnchangedToggle.addEventListener("change", () => {
+  showDiff();
 });
