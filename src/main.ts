@@ -18,6 +18,7 @@ const versionSelect = document.querySelector<HTMLSelectElement>("#version-select
 const configStatus = document.querySelector<HTMLDivElement>("#config-status")!;
 const resultsList = document.querySelector<HTMLUListElement>("#results")!;
 const errorBanner = document.querySelector<HTMLDivElement>("#error-banner")!;
+const formatStatus = document.querySelector<HTMLDivElement>("#format-status")!;
 const diffView = document.querySelector<HTMLDivElement>("#diff-view")!;
 const collapseUnchangedToggle = document.querySelector<HTMLInputElement>("#collapse-unchanged-toggle")!;
 const urlWarning = document.querySelector<HTMLDivElement>("#url-warning")!;
@@ -106,6 +107,7 @@ function clearDiff() {
   diffAfter = null;
   pendingFormattedCode = null;
   applyButton.style.display = "none";
+  formatStatus.style.display = "none";
 }
 
 /** Re-renders the diff preview from the last Format result — e.g. when the
@@ -201,6 +203,10 @@ async function format() {
     if (formatted !== currentCode) {
       pendingFormattedCode = formatted;
       applyButton.style.display = "inline";
+    } else {
+      // Formatting was a no-op — the input was already clean.
+      formatStatus.textContent = "✓ Format OK";
+      formatStatus.style.display = "block";
     }
   } catch (error) {
     // Ruff's formatter throws on code it can't parse — same red-banner path
