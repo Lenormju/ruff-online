@@ -36,9 +36,9 @@ function isAtLeast(version, floor) {
 }
 
 /**
- * @param {{tag_name: string, draft: boolean, prerelease: boolean}[]} releases
+ * @param {{tag_name: string, draft: boolean, prerelease: boolean, published_at: string}[]} releases
  * @param {string[]} existingVersions
- * @returns {string[]}
+ * @returns {{version: string, releaseDate: string}[]}
  */
 export function findNewVersions(releases, existingVersions) {
   const known = new Set(existingVersions);
@@ -50,7 +50,10 @@ export function findNewVersions(releases, existingVersions) {
         !known.has(release.tag_name) &&
         isAtLeast(release.tag_name, MIN_SUPPORTED_VERSION)
     )
-    .map((release) => release.tag_name);
+    .map((release) => ({
+      version: release.tag_name,
+      releaseDate: release.published_at.slice(0, 10),
+    }));
 }
 
 function readExistingVersions() {

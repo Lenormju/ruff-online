@@ -37,7 +37,9 @@ jobs:
           echo "New versions: $NEW_VERSIONS"
           ingested=()
           failed=0
-          for version in $(echo "$NEW_VERSIONS" | jq -r '.[]'); do
+          for entry in $(echo "$NEW_VERSIONS" | jq -c '.[]'); do
+            version=$(echo "$entry" | jq -r '.version')
+            releaseDate=$(echo "$entry" | jq -r '.releaseDate')
             echo "::group::Ingesting Ruff $version"
 
             if ! node scripts/gen-rules-json.mjs "$version"; then
@@ -57,16 +59,17 @@ jobs:
             node -e "
               const fs = require('fs');
               const path = 'public/supported-versions.json';
-              const version = process.argv[1];
+              const [version, releaseDate] = process.argv.slice(1);
               const entry = {
                 version,
                 wasmUrl: \`https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@\${version}/ruff_wasm.js\`,
                 rulesPath: \`versions/\${version}/rules.json\`,
+                releaseDate,
               };
               const versions = JSON.parse(fs.readFileSync(path, 'utf-8'));
               versions.push(entry);
               fs.writeFileSync(path, JSON.stringify(versions, null, 2) + '\n');
-            " "$version"
+            " "$version" "$releaseDate"
 
             echo "Ingested Ruff $version"
             ingested+=("$version")

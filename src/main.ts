@@ -1,5 +1,11 @@
 import { checkCode, formatCode, SYNTAX_ERROR_CODE } from "./engine/workspace";
-import { getLatestVersion, getVersions, supportsUtf16PositionEncoding, type VersionEntry } from "./engine/versions";
+import {
+  formatVersionLabel,
+  getLatestVersion,
+  getVersions,
+  supportsUtf16PositionEncoding,
+  type VersionEntry,
+} from "./engine/versions";
 import { createPythonEditor } from "./editor/python-editor";
 import { createTomlEditor } from "./editor/toml-editor";
 import { replaceContent } from "./editor/common";
@@ -36,7 +42,8 @@ const applyButton = document.querySelector<HTMLButtonElement>("#apply-button")!;
 const copyLinkButton = document.querySelector<HTMLButtonElement>("#copy-link-button")!;
 const dumpStateButton = document.querySelector<HTMLButtonElement>("#dump-state-button")!;
 const debugOutput = document.querySelector<HTMLPreElement>("#debug-output")!;
-const versionSelect = document.querySelector<HTMLSelectElement>("#version-select")!;
+const versionInput = document.querySelector<HTMLInputElement>("#version-input")!;
+const versionDatalist = document.querySelector<HTMLDataListElement>("#version-datalist")!;
 const configStatus = document.querySelector<HTMLDivElement>("#config-status")!;
 const resultsList = document.querySelector<HTMLUListElement>("#results")!;
 const errorBanner = document.querySelector<HTMLDivElement>("#error-banner")!;
@@ -57,6 +64,7 @@ const initialState = await loadInitialState(location.hash);
 
 let versions: VersionEntry[] = [];
 let currentEntry: VersionEntry | null = null;
+const labelToEntry = new Map<string, VersionEntry>();
 let pendingFormattedCode: string | null = null;
 let diffBefore: string | null = null;
 let diffAfter: string | null = null;
@@ -201,22 +209,24 @@ async function initVersions() {
   const preferred = initialState ? versions.find((entry) => entry.version === initialState.version) : undefined;
   const initial = preferred ?? latest;
 
-  versionSelect.replaceChildren(
+  labelToEntry.clear();
+  versionDatalist.replaceChildren(
     ...versions.map((entry) => {
+      const label = formatVersionLabel(entry, entry.version === latest.version);
+      labelToEntry.set(label, entry);
       const option = document.createElement("option");
-      option.value = entry.version;
-      option.textContent = entry.version === latest.version ? `${entry.version} (latest)` : entry.version;
+      option.value = label;
       return option;
     }),
   );
-  versionSelect.value = initial.version;
+  versionInput.value = formatVersionLabel(initial, initial.version === latest.version);
   currentEntry = initial;
   updatePositionEncodingWarning();
   void loadRulesIndexFor(initial);
 }
 
-wireStateControl(versionSelect, "change", () => {
-  currentEntry = versions.find((entry) => entry.version === versionSelect.value) ?? null;
+wireStateControl(versionInput, "change", () => {
+  currentEntry = labelToEntry.get(versionInput.value) ?? null;
   updatePositionEncodingWarning();
   if (currentEntry) void loadRulesIndexFor(currentEntry);
 });

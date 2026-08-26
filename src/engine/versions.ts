@@ -2,6 +2,7 @@ export interface VersionEntry {
   version: string;
   wasmUrl: string;
   rulesPath: string;
+  releaseDate: string;
 }
 
 /**
@@ -30,6 +31,11 @@ const POSITION_ENCODING_MIN_VERSION = "0.13.2";
 
 export function supportsUtf16PositionEncoding(version: string): boolean {
   return compareVersions(version, POSITION_ENCODING_MIN_VERSION) >= 0;
+}
+
+/** Display string for a version-picker entry, e.g. "0.16.4 — 2026-08-01 (latest)". */
+export function formatVersionLabel(entry: VersionEntry, isLatest: boolean): string {
+  return `${entry.version} — ${entry.releaseDate}${isLatest ? " (latest)" : ""}`;
 }
 
 let versionsPromise: Promise<VersionEntry[]> | null = null;

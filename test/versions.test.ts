@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { compareVersions, supportsUtf16PositionEncoding } from "../src/engine/versions";
+import { compareVersions, formatVersionLabel, supportsUtf16PositionEncoding } from "../src/engine/versions";
 
 describe("compareVersions", () => {
   test("numeric dot-component comparison: 0.10.0 > 0.9.0 (not string comparison)", () => {
@@ -34,5 +34,17 @@ describe("supportsUtf16PositionEncoding", () => {
 
   test("false for a much older version", () => {
     expect(supportsUtf16PositionEncoding("0.11.1")).toBe(false);
+  });
+});
+
+describe("formatVersionLabel", () => {
+  const entry = { version: "0.16.4", releaseDate: "2026-08-01", wasmUrl: "", rulesPath: "" };
+
+  test("plain entry: version and date, no latest marker", () => {
+    expect(formatVersionLabel(entry, false)).toBe("0.16.4 — 2026-08-01");
+  });
+
+  test("latest entry: appends the latest marker", () => {
+    expect(formatVersionLabel(entry, true)).toBe("0.16.4 — 2026-08-01 (latest)");
   });
 });
