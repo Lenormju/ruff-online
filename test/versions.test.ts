@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { compareVersions } from "../src/engine/versions";
+import { compareVersions, supportsUtf16PositionEncoding } from "../src/engine/versions";
 
 describe("compareVersions", () => {
   test("numeric dot-component comparison: 0.10.0 > 0.9.0 (not string comparison)", () => {
@@ -16,5 +16,23 @@ describe("compareVersions", () => {
 
   test("equal versions return 0", () => {
     expect(compareVersions("0.16.4", "0.16.4")).toBe(0);
+  });
+});
+
+describe("supportsUtf16PositionEncoding", () => {
+  test("false just below the 0.13.2 floor", () => {
+    expect(supportsUtf16PositionEncoding("0.13.1")).toBe(false);
+  });
+
+  test("true exactly at the 0.13.2 floor", () => {
+    expect(supportsUtf16PositionEncoding("0.13.2")).toBe(true);
+  });
+
+  test("true for a version well above the floor", () => {
+    expect(supportsUtf16PositionEncoding("0.16.4")).toBe(true);
+  });
+
+  test("false for a much older version", () => {
+    expect(supportsUtf16PositionEncoding("0.11.1")).toBe(false);
   });
 });

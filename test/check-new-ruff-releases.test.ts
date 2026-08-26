@@ -54,17 +54,17 @@ describe("findNewVersions", () => {
   });
 
   test("excludes a release older than the minimum supported version", () => {
-    const releases = [{ tag_name: "0.13.1", draft: false, prerelease: false }];
+    const releases = [{ tag_name: "0.11.0", draft: false, prerelease: false }];
     expect(findNewVersions(releases, [])).toEqual([]);
   });
 
   test("includes a release exactly at the minimum supported version", () => {
-    const releases = [{ tag_name: "0.13.2", draft: false, prerelease: false }];
-    expect(findNewVersions(releases, [])).toEqual(["0.13.2"]);
+    const releases = [{ tag_name: "0.11.1", draft: false, prerelease: false }];
+    expect(findNewVersions(releases, [])).toEqual(["0.11.1"]);
   });
 
   test("excludes an old release with a lower minor but higher patch", () => {
-    const releases = [{ tag_name: "0.12.99", draft: false, prerelease: false }];
+    const releases = [{ tag_name: "0.10.99", draft: false, prerelease: false }];
     expect(findNewVersions(releases, [])).toEqual([]);
   });
 });

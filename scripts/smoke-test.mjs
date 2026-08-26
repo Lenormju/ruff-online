@@ -29,7 +29,11 @@ async function main() {
   const mod = await import(cdnUrl);
   await mod.default();
 
-  const workspace = new mod.Workspace({}, mod.PositionEncoding.Utf16);
+  // Not all supported versions export `PositionEncoding` (added in
+  // @astral-sh/ruff-wasm-web 0.13.2) — see src/engine/workspace.ts.
+  const workspace = mod.PositionEncoding
+    ? new mod.Workspace({}, mod.PositionEncoding.Utf16)
+    : new mod.Workspace({});
 
   const checkResult = workspace.check("import os\n");
   if (!Array.isArray(checkResult)) {

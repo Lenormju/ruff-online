@@ -1,5 +1,5 @@
 import { checkCode, formatCode, SYNTAX_ERROR_CODE } from "./engine/workspace";
-import { getLatestVersion, getVersions, type VersionEntry } from "./engine/versions";
+import { getLatestVersion, getVersions, supportsUtf16PositionEncoding, type VersionEntry } from "./engine/versions";
 import { createPythonEditor } from "./editor/python-editor";
 import { createTomlEditor } from "./editor/toml-editor";
 import { replaceContent } from "./editor/common";
@@ -44,6 +44,7 @@ const formatStatus = document.querySelector<HTMLDivElement>("#format-status")!;
 const diffView = document.querySelector<HTMLDivElement>("#diff-view")!;
 const collapseUnchangedToggle = document.querySelector<HTMLInputElement>("#collapse-unchanged-toggle")!;
 const urlWarning = document.querySelector<HTMLDivElement>("#url-warning")!;
+const positionEncodingWarning = document.querySelector<HTMLDivElement>("#position-encoding-warning")!;
 
 const defaultCode = "import os";
 // An empty [tool.ruff] table means Ruff's defaults — nothing is silently
@@ -188,6 +189,12 @@ async function switchMode(target: Mode) {
   applyModeUI();
 }
 
+/** Shown for Ruff versions predating @astral-sh/ruff-wasm-web's `PositionEncoding` export (0.13.2). */
+function updatePositionEncodingWarning() {
+  positionEncodingWarning.style.display =
+    currentEntry && !supportsUtf16PositionEncoding(currentEntry.version) ? "block" : "none";
+}
+
 async function initVersions() {
   versions = await getVersions();
   const latest = await getLatestVersion();
@@ -204,11 +211,13 @@ async function initVersions() {
   );
   versionSelect.value = initial.version;
   currentEntry = initial;
+  updatePositionEncodingWarning();
   void loadRulesIndexFor(initial);
 }
 
 wireStateControl(versionSelect, "change", () => {
   currentEntry = versions.find((entry) => entry.version === versionSelect.value) ?? null;
+  updatePositionEncodingWarning();
   if (currentEntry) void loadRulesIndexFor(currentEntry);
 });
 

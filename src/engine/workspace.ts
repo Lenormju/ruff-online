@@ -20,8 +20,14 @@ interface RuffWorkspace {
 
 interface RuffWasmModule {
   default: () => Promise<unknown>;
-  Workspace: new (options: RuffOptions, positionEncoding: number) => RuffWorkspace;
-  PositionEncoding: { Utf16: number };
+  Workspace: new (options: RuffOptions, positionEncoding?: number) => RuffWorkspace;
+  // Only present from @astral-sh/ruff-wasm-web 0.13.2 onward (see
+  // scripts/check-new-ruff-releases.mjs). Older builds default to counting
+  // columns in Unicode codepoints rather than UTF-16 code units — identical
+  // for anything in the Basic Multilingual Plane, off by one per
+  // astral-plane character (e.g. emoji) preceding a diagnostic on the same
+  // line otherwise. Row is never affected.
+  PositionEncoding?: { Utf16: number };
 }
 
 /**
@@ -67,8 +73,10 @@ export function getWorkspace(
   const key = `${version}\n${JSON.stringify(options)}`;
   let workspacePromise = workspaceCache.get(key);
   if (!workspacePromise) {
-    workspacePromise = getModule(version, wasmUrl).then(
-      (mod) => new mod.Workspace(options, mod.PositionEncoding.Utf16),
+    workspacePromise = getModule(version, wasmUrl).then((mod) =>
+      mod.PositionEncoding
+        ? new mod.Workspace(options, mod.PositionEncoding.Utf16)
+        : new mod.Workspace(options),
     );
     // A rejected promise must not be cached, or a transient CDN failure would
     // be sticky for the rest of the session.

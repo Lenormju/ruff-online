@@ -23,6 +23,15 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+// @astral-sh/ruff-wasm-web only started exporting `PositionEncoding` at this
+// version (see scripts/check-new-ruff-releases.mjs and src/engine/workspace.ts).
+// Kept in sync with that floor for the UI warning shown for older versions.
+const POSITION_ENCODING_MIN_VERSION = "0.13.2";
+
+export function supportsUtf16PositionEncoding(version: string): boolean {
+  return compareVersions(version, POSITION_ENCODING_MIN_VERSION) >= 0;
+}
+
 let versionsPromise: Promise<VersionEntry[]> | null = null;
 
 export async function getVersions(): Promise<VersionEntry[]> {

@@ -121,7 +121,8 @@
         border: 1px solid #7a7;
         color: #262;
       }
-      #url-warning {
+      #url-warning,
+      #position-encoding-warning {
         display: none;
         padding: 0.5rem 0.75rem;
         border-radius: 4px;
@@ -167,6 +168,10 @@
     <div id="url-warning">
       This page's URL is over ~6000 characters — some browsers or link-sharing tools may truncate a shared link
       this long.
+    </div>
+    <div id="position-encoding-warning">
+      This Ruff version predates UTF-16 position support. For lines containing Unicode "astral" characters
+      (e.g. emoji), a diagnostic's column may be slightly off.
     </div>
     <pre id="debug-output"></pre>
 

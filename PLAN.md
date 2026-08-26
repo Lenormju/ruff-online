@@ -172,6 +172,18 @@ line; a snippet with an emoji in a string still jumps to the correct column.
 **Critical files**: the three `scripts/*.mjs`, `.github/workflows/ingest-versions.yml`,
 `public/supported-versions.json`, `src/engine/versions.ts`.
 
+**Version floor (as of the 2026-08-26 fix)**: `check-new-ruff-releases.mjs`
+only offers Ruff releases `>= 0.11.1` for ingestion. `@astral-sh/ruff-wasm-web`
+never published a build before `0.5.3` (2024-07-18), and `0.5.3`-`0.11.0`
+have two unhandled incompatibilities beyond the `0.13.2` `PositionEncoding`
+one `workspace.ts` already tolerates: the diagnostic field was named
+`location` instead of `start_location` (renamed exactly at `0.11.0` ->
+`0.11.1`), and there's no `"invalid-syntax"` diagnostic code to detect syntax
+errors by (message-text only). The `Workspace` options schema across that
+whole span is also unverified. Supporting `0.5.3`-`0.11.0` is possible but
+deferred — would need field normalization, syntax-error detection by message
+prefix, and an options-schema audit across ~60 versions.
+
 **Verification**: run both scripts locally for one version, confirm
 `rules.json` is well-formed and the smoke test exits 0. Manually trigger the
 workflow against a repo missing the latest release, confirm exactly that

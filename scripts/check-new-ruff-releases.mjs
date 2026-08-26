@@ -10,10 +10,21 @@ const RELEASES_URL =
   "https://api.github.com/repos/astral-sh/ruff/releases?per_page=100";
 const SUPPORTED_VERSIONS_PATH = "public/supported-versions.json";
 
-// @astral-sh/ruff-wasm-web only started exporting `PositionEncoding` at this
-// version; older builds can't construct a `Workspace` the way we need
-// (see src/engine/workspace.ts), so the smoke test can never pass for them.
-const MIN_SUPPORTED_VERSION = "0.13.2";
+// @astral-sh/ruff-wasm-web renamed the diagnostic `location` field to
+// `start_location` starting at this version (see src/engine/workspace.ts) —
+// older builds return a shape our code doesn't parse. Versions from here up
+// to 0.13.1 lack the separate `PositionEncoding` export added at 0.13.2;
+// src/engine/workspace.ts falls back to the wasm module's default (codepoint,
+// not UTF-16) position encoding for those, which is only cosmetically
+// inaccurate on lines with astral-plane Unicode characters.
+//
+// Below this floor (0.5.3 - 0.11.0, the oldest ever published to npm) two more
+// incompatibilities exist that aren't handled yet and would need real work to
+// support: no `start_location` field at all (still `location`), and no
+// `"invalid-syntax"` diagnostic code to detect syntax errors by (message text
+// only). The `Workspace` options schema across that whole span is also
+// unverified. Could be supported later if worth the effort.
+const MIN_SUPPORTED_VERSION = "0.11.1";
 
 function isAtLeast(version, floor) {
   const v = version.split(".").map(Number);
