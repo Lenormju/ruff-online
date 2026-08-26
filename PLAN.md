@@ -317,6 +317,46 @@ pass: Visual→TOML→Visual round-trip of `line_length`/`target_version`/
 with the text untouched), and a full Copy-link → fresh-context reload
 restoring Visual mode plus every field.
 
+**Known gap, deferred (not this phase)**: Tier 1/3's field names and enum
+values (`src/config/options.ts`'s `TIER1_FIELDS`/`TIER3_FIELDS`) are a
+single static list, taken from Ruff's `ruff.schema.json` on the `main`
+branch (i.e. today's latest Ruff) — **not generated per-version the way
+`rules.json` already is** (Phase 2's `scripts/gen-rules-json.mjs`
+pipeline). The Visual form has no notion of which Ruff version is
+currently selected: the same fields/options are offered regardless of
+whether `0.13.2` or `0.16.4` is picked in the version `<select>`.
+Empirically verified (2026-08-26, real `Workspace` construction against
+the actual CDN wasm) that every current Tier 1/3 field/enum value is
+accepted on every currently-supported version (`0.13.2` through
+`0.16.4`) — so there is no live bug today. But nothing guards against
+future drift: a Ruff release that renames/removes a field, or (in
+principle) a version old enough to predate one, would make `Workspace`
+throw, surfacing as the same generic red error banner used for any Ruff
+exception — not a crash, but a confusing top-level error tied to what
+looks like a valid form selection, with no per-field "unsupported on this
+version" signal. Revisit before/during Phase 7 (Tier 2) or Phase 9 (Tier
+4, ~130 fields across ~25 plugins, where the risk multiplies): likely
+fix is extending the version-ingestion workflow to also emit a
+per-version options schema (or at least a smoke-test assertion covering
+Tier 1/3/4's exact field set) alongside each version's `rules.json`, so
+schema drift is caught the same way rule drift already is, rather than
+relying solely on the runtime exception path.
+
+**Known gap, deferred (UI/UX polish)**: the page's visual design has been
+built purely feature-by-feature since Phase 0 — plain default browser form
+controls, no visual hierarchy beyond `<h2>`/`<h3>` headings, no responsive/
+mobile layout consideration, and inconsistent spacing across the growing
+number of status/warning banners (`#error-banner`, `#config-status`,
+`#url-warning`, `#format-status`). Tier 1/3's General/Formatting groups
+added in this phase are visually cramped, tiny inline labels with no
+grouping beyond a bare `<h3>` (see the Phase 6 verification screenshot).
+No phase in this plan currently includes a design/UX pass — Phase 11 is
+scoped to a README + an in-app help notice, not general styling. Revisit
+once the config UI stabilizes, likely after Tier 2/4 (Phases 7/9) add
+significantly more form surface — probably worth its own dedicated pass
+rather than folded into a feature phase, so it doesn't keep getting
+deferred in favor of the next functional slice.
+
 ---
 
 ## Phase 7 — Visual Mode, Tier 2: Rule Selection
