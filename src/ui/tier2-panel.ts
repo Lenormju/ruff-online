@@ -17,7 +17,7 @@ export interface Tier2Panel extends Panel<Tier2Options> {
   setRulesIndex(index: RulesIndex): void;
 }
 
-/** A category label's phase-derived state, for the muted-vs-normal "default" styling and the tooltip text. */
+/** A category header's phase-derived tooltip text. */
 function phaseLabel(phase: CategoryPhase, onCount: number, total: number): string {
   if (phase === "selected") return "selected";
   if (phase === "deselected") return "deselected";
@@ -58,10 +58,11 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
 
   /**
    * Updates a header's checkbox checked/indeterminate state (fully checked,
-   * fully unchecked, or a native tri-state "partial" dash) and its
-   * "N/total selected" count label, both from how many of `rules` are
-   * currently effectively on. Used for both real categories and the
-   * top-level ALL toggle (whose `rules` is the entire rule set).
+   * fully unchecked, or a native tri-state "partial" dash — a genuine
+   * "children disagree" signal, since a category has more than one rule
+   * under it) and its "N/total selected" count label, both from how many of
+   * `rules` are currently effectively on. Used for both real categories and
+   * the top-level ALL toggle (whose `rules` is the entire rule set).
    */
   function updateHeader(checkbox: HTMLInputElement, countLabel: HTMLElement, container: HTMLElement, category: Category): void {
     const rules = category.rules;
@@ -71,9 +72,12 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
     countLabel.textContent = `(${onCount}/${rules.length})`;
 
     const phase = categoryPhase(category, categorySelected, ruleOverrides);
-    const label = phaseLabel(phase, onCount, rules.length);
-    container.title = label;
-    container.classList.toggle("tier2-default", phase === "default");
+    container.title = phaseLabel(phase, onCount, rules.length);
+    // Highlight only an explicit bulk choice (phase selected/deselected) —
+    // "default" is the normal, untouched look, whether it happens to
+    // resolve full/none/partial; see `refreshAll`'s rule loop for why a
+    // single rule never uses `indeterminate` for this same distinction.
+    container.classList.toggle("tier2-explicit", phase !== "default");
   }
 
   /** Refreshes every rendered header/checkbox after any state change, wherever it originated. */
@@ -82,15 +86,16 @@ export function createTier2Panel(container: HTMLElement, initial: Tier2Options, 
       const rule = index?.byCode.get(code);
       if (rule) {
         const override = ruleOverrides.get(code);
-        if (override === undefined) {
-          checkbox.indeterminate = true;
-          checkbox.title = `default — currently ${effectiveOn(rule) ? "on" : "off"}`;
-        } else {
-          checkbox.indeterminate = false;
-          checkbox.checked = override === "on";
-          checkbox.title = "";
-        }
-        checkbox.closest("label")?.classList.toggle("tier2-default", override === undefined);
+        // Always a plain checked/unchecked value, reflecting what's actually
+        // effective — never `indeterminate`. A single rule isn't "partial"
+        // the way a category with several children can be; reusing that
+        // same dash for "not explicitly set" would visually conflate two
+        // different concepts. "default" is the normal look; an explicit
+        // choice gets highlighted instead (see the `tier2-explicit` class).
+        checkbox.indeterminate = false;
+        checkbox.checked = override === undefined ? effectiveOn(rule) : override === "on";
+        checkbox.title = override === undefined ? `default — currently ${checkbox.checked ? "on" : "off"}` : `explicitly ${override}`;
+        checkbox.closest("label")?.classList.toggle("tier2-explicit", override !== undefined);
       }
     }
     for (const { checkbox, countLabel, summary, category } of categoryHeaders) {
