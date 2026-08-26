@@ -8,17 +8,18 @@ import {
 } from "./engine/versions";
 import { createPythonEditor } from "./editor/python-editor";
 import { createTomlEditor } from "./editor/toml-editor";
+import { createCliEditor } from "./editor/cli-editor";
 import { replaceContent } from "./editor/common";
-import { tomlToOptions, type TomlOptionsResult } from "./config/toml-options";
+import { ruffOptionsToTomlText, tomlToOptions, type TomlOptionsResult } from "./config/toml-options";
+import { cliFlagsToOptions, deepMergeOptions } from "./config/cli-flags";
 import {
   EMPTY_VISUAL_OPTIONS,
   ruffOptionsToVisualOptions,
   visualOptionsToRuffOptions,
-  visualOptionsToTomlText,
   type Mode,
 } from "./config/options";
 import { buildRulesIndex, loadRules, type RulesIndex } from "./config/rules-data";
-import { tomlToVisualWarning } from "./ui/mode-switch";
+import { optionsToVisualWarning } from "./ui/mode-switch";
 import { createTier1Panel } from "./ui/tier1-panel";
 import { createTier2Panel } from "./ui/tier2-panel";
 import { createTier3Panel } from "./ui/tier3-panel";
@@ -29,13 +30,17 @@ import { createUrlSync, loadInitialState } from "./state/app-state";
 import type { AppState } from "./state/url-state";
 
 const editorContainer = document.querySelector<HTMLDivElement>("#editor-container")!;
+const codeContainer = document.querySelector<HTMLDivElement>("#code-container")!;
 const tomlContainer = document.querySelector<HTMLDivElement>("#toml-container")!;
+const cliContainer = document.querySelector<HTMLDivElement>("#cli-container")!;
 const visualContainer = document.querySelector<HTMLDivElement>("#visual-container")!;
 const tier1Container = document.querySelector<HTMLDivElement>("#tier1-container")!;
 const tier2Container = document.querySelector<HTMLDivElement>("#tier2-container")!;
 const tier3Container = document.querySelector<HTMLDivElement>("#tier3-container")!;
-const modeTomlRadio = document.querySelector<HTMLInputElement>("#mode-toml")!;
+const modeCodeRadio = document.querySelector<HTMLInputElement>("#mode-code")!;
 const modeVisualRadio = document.querySelector<HTMLInputElement>("#mode-visual")!;
+const fillFromVisualButton = document.querySelector<HTMLButtonElement>("#fill-from-visual-button")!;
+const cliIgnoredNotice = document.querySelector<HTMLDivElement>("#cli-ignored-notice")!;
 const checkButton = document.querySelector<HTMLButtonElement>("#check-button")!;
 const formatButton = document.querySelector<HTMLButtonElement>("#format-button")!;
 const applyButton = document.querySelector<HTMLButtonElement>("#apply-button")!;
@@ -57,6 +62,9 @@ const defaultCode = "import os";
 // An empty [tool.ruff] table means Ruff's defaults — nothing is silently
 // already in force until Check is clicked.
 const defaultToml = ["[tool.ruff]", "# line-length = 88", '# lint.select = ["E", "F"]', ""].join("\n");
+// CLI flags are overrides layered on top of the TOML base above (CLI wins on
+// conflicts) — an empty/commented CLI box means "no overrides", not "no config".
+const defaultCli = ["ruff check", "# --select E,F", '# --config "line-length=100"', ""].join("\n");
 
 // Read once, at initial load only — never re-applied on a later `hashchange`
 // while the user is editing (see PLAN.md Phase 5's hard UX rule).
@@ -76,10 +84,10 @@ let diffEditorView: ReturnType<typeof renderDiff> | null = null;
 // rules finish loading (see `loadRulesIndexFor` below).
 let currentRulesIndex: RulesIndex | null = null;
 
-// Which config mode is active — TOML and Visual are never live-synced, only
-// converted into each other on an explicit mode switch (see mode radios
-// below), so both an editor's TOML text and the Visual panels' field values
-// always exist regardless of which one is currently in force.
+// Which facet is active — Code (TOML base + CLI overrides, merged) or
+// Visual. Unlike a TOML/CLI split, there's no separate "which syntax"
+// sub-state: both of Code's boxes are always shown together and never
+// synced with each other.
 let mode: Mode = initialState?.mode ?? "visual";
 
 // Reassigned once `urlSync` exists below; editors are created first since
@@ -88,14 +96,30 @@ let notifyUrlSync: () => void = () => {};
 
 const editor = createPythonEditor(editorContainer, initialState?.code ?? defaultCode, () => notifyUrlSync());
 const tomlEditor = createTomlEditor(tomlContainer, initialState?.toml ?? defaultToml, () => notifyUrlSync());
+const cliEditor = createCliEditor(cliContainer, initialState?.cli ?? defaultCli, () => {
+  updateCliIgnoredNotice();
+  notifyUrlSync();
+});
 const tier1Panel = createTier1Panel(tier1Container, initialState?.visual.tier1 ?? EMPTY_VISUAL_OPTIONS.tier1, () => notifyUrlSync());
 const tier3Panel = createTier3Panel(tier3Container, initialState?.visual.tier3 ?? EMPTY_VISUAL_OPTIONS.tier3, () => notifyUrlSync());
 const tier2Panel = createTier2Panel(tier2Container, initialState?.visual.tier2 ?? EMPTY_VISUAL_OPTIONS.tier2, () => notifyUrlSync());
 
+/** Live-updates `#cli-ignored-notice` from the CLI box's current text — independent of Check/Format. */
+function updateCliIgnoredNotice() {
+  const result = cliFlagsToOptions(cliEditor.state.doc.toString());
+  if (result.ok && result.ignoredFlags.length > 0) {
+    cliIgnoredNotice.textContent = `Ignored (no effect in this browser tool): ${result.ignoredFlags.join(", ")}`;
+    cliIgnoredNotice.style.display = "block";
+  } else {
+    cliIgnoredNotice.style.display = "none";
+  }
+}
+updateCliIgnoredNotice();
+
 function applyModeUI() {
-  modeTomlRadio.checked = mode === "toml";
+  modeCodeRadio.checked = mode === "code";
   modeVisualRadio.checked = mode === "visual";
-  tomlContainer.style.display = mode === "toml" ? "block" : "none";
+  codeContainer.style.display = mode === "code" ? "block" : "none";
   visualContainer.style.display = mode === "visual" ? "block" : "none";
 }
 applyModeUI();
@@ -104,10 +128,21 @@ function currentVisualOptions() {
   return { tier1: tier1Panel.get(), tier3: tier3Panel.get(), tier2: tier2Panel.get() };
 }
 
-/** The options the active mode currently represents — feeds Check/Format. */
+/**
+ * The options the active mode currently represents — feeds Check/Format.
+ * In Code mode, TOML (base) and CLI (overrides) are parsed independently and
+ * merged, CLI winning on conflicts — they're complementary layers of one
+ * value, never converted into each other.
+ */
 function currentOptionsResult(): TomlOptionsResult {
-  if (mode === "toml") return tomlToOptions(tomlEditor.state.doc.toString());
-  return { ok: true, options: visualOptionsToRuffOptions(currentVisualOptions(), currentRulesIndex), hasRuffTable: true };
+  if (mode === "visual") {
+    return { ok: true, options: visualOptionsToRuffOptions(currentVisualOptions(), currentRulesIndex), hasRuffTable: true };
+  }
+  const tomlResult = tomlToOptions(tomlEditor.state.doc.toString());
+  if (!tomlResult.ok) return tomlResult;
+  const cliResult = cliFlagsToOptions(cliEditor.state.doc.toString());
+  if (!cliResult.ok) return cliResult;
+  return { ok: true, options: deepMergeOptions(tomlResult.options, cliResult.options), hasRuffTable: true };
 }
 
 function getCurrentAppState(): AppState {
@@ -116,6 +151,7 @@ function getCurrentAppState(): AppState {
     mode,
     code: editor.state.doc.toString(),
     toml: tomlEditor.state.doc.toString(),
+    cli: cliEditor.state.doc.toString(),
     visual: currentVisualOptions(),
   };
 }
@@ -143,8 +179,9 @@ function wireStateControl(target: EventTarget, event: string, handler: () => voi
   });
 }
 
-wireStateControl(modeTomlRadio, "change", () => switchMode("toml"));
+wireStateControl(modeCodeRadio, "change", () => switchMode("code"));
 wireStateControl(modeVisualRadio, "change", () => switchMode("visual"));
+wireStateControl(fillFromVisualButton, "click", () => fillCodeFromVisual());
 
 /** Loads (and caches) a version's rules index, applying it to Tier 2 only if that version is still the active one by the time it resolves. */
 async function loadRulesIndexFor(entry: VersionEntry): Promise<RulesIndex> {
@@ -160,11 +197,17 @@ async function loadRulesIndexFor(entry: VersionEntry): Promise<RulesIndex> {
 async function switchMode(target: Mode) {
   if (target === mode) return;
 
-  if (mode === "toml" && target === "visual") {
-    const result = tomlToOptions(tomlEditor.state.doc.toString());
-    if (!result.ok) {
+  if (target === "visual") {
+    const tomlResult = tomlToOptions(tomlEditor.state.doc.toString());
+    if (!tomlResult.ok) {
       applyModeUI(); // revert the radio to the still-active mode
-      showConfigParseError(result.message);
+      showConfigParseError(tomlResult.message);
+      return;
+    }
+    const cliResult = cliFlagsToOptions(cliEditor.state.doc.toString());
+    if (!cliResult.ok) {
+      applyModeUI();
+      showConfigParseError(cliResult.message);
       return;
     }
     if (!currentEntry) {
@@ -172,8 +215,9 @@ async function switchMode(target: Mode) {
       showError("No Ruff version selected yet.");
       return;
     }
+    const merged = deepMergeOptions(tomlResult.options, cliResult.options);
     const rulesIndex = currentRulesIndex ?? (await loadRulesIndexFor(currentEntry));
-    const warning = tomlToVisualWarning(result.options, rulesIndex);
+    const warning = optionsToVisualWarning(merged, rulesIndex);
     if (warning !== null && !confirm(`${warning}\n\nContinue?`)) {
       applyModeUI();
       return;
@@ -181,20 +225,35 @@ async function switchMode(target: Mode) {
     clearOutput();
     clearConfigStatus();
     clearDiff();
-    const { visual } = ruffOptionsToVisualOptions(result.options, rulesIndex);
+    const { visual } = ruffOptionsToVisualOptions(merged, rulesIndex);
     tier1Panel.set(visual.tier1);
     tier3Panel.set(visual.tier3);
     tier2Panel.set(visual.tier2);
   } else {
-    // Visual -> TOML is never lossy: Tier 1+2+3 together can't hold anything TOML can't express.
+    // Visual -> Code is a pure visibility change: whatever is already in the
+    // TOML/CLI boxes stays exactly as-is. Populating them from Visual is a
+    // separate, explicit action (see `fillCodeFromVisual`), not an automatic
+    // side effect of switching modes.
     clearOutput();
     clearConfigStatus();
     clearDiff();
-    replaceContent(tomlEditor, visualOptionsToTomlText(currentVisualOptions(), currentRulesIndex));
   }
 
   mode = target;
   applyModeUI();
+}
+
+/** Explicit "Fill from Visual" action: populates the TOML box with Visual's full state and
+ * resets the CLI box to empty, so the merge stays unambiguous. Never lossy (Visual's coverage
+ * is always a subset of what TOML can express) and never warns — the click itself is consent. */
+async function fillCodeFromVisual() {
+  clearOutput();
+  clearConfigStatus();
+  clearDiff();
+  const merged = visualOptionsToRuffOptions(currentVisualOptions(), currentRulesIndex);
+  replaceContent(tomlEditor, ruffOptionsToTomlText(merged));
+  replaceContent(cliEditor, defaultCli);
+  updateCliIgnoredNotice();
 }
 
 /** Shown for Ruff versions predating @astral-sh/ruff-wasm-web's `PositionEncoding` export (0.13.2). */
@@ -281,9 +340,9 @@ function showError(error: unknown) {
   errorBanner.style.display = "block";
 }
 
-/** The config-only, non-Ruff failure kind: TOML that never reached Ruff. */
+/** The config-only, non-Ruff failure kind: TOML/CLI text that never reached Ruff. */
 function showConfigParseError(message: string) {
-  configStatus.textContent = `TOML parse error — not run.\n${message}`;
+  configStatus.textContent = `Config parse error — not run.\n${message}`;
   configStatus.classList.add("parse-error");
   configStatus.style.display = "block";
 }

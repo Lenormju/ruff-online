@@ -57,9 +57,27 @@
         width: 15rem;
         margin-right: 0.5rem;
       }
+      #code-container,
       #visual-container {
         border: 1px solid #ccc;
         padding: 0.5rem 0.75rem;
+      }
+      #code-container h3 {
+        margin: 0.5rem 0 0.25rem;
+        font-size: 0.9rem;
+      }
+      #cli-container .cm-editor {
+        height: 4rem;
+      }
+      #cli-ignored-notice {
+        display: none;
+        padding: 0.5rem 0.75rem;
+        border-radius: 4px;
+        margin: 0.5rem 0;
+        font-size: 0.85rem;
+        background: #fff8e0;
+        border: 1px solid #d9a300;
+        color: #7a5600;
       }
       #visual-container h3 {
         margin: 0.5rem 0 0.25rem;
@@ -90,9 +108,9 @@
         margin: 0.1rem 0;
       }
       /*
-       * Deliberately NOT the red #error-banner styling: a TOML syntax error is
-       * a third, distinct kind of failure — the config never reached Ruff, so
-       * Ruff is never invoked at all.
+       * Deliberately NOT the red #error-banner styling: a TOML or CLI-flags
+       * parse error is a third, distinct kind of failure — the config never
+       * reached Ruff, so Ruff is never invoked at all.
        */
       #config-status {
         display: none;
@@ -180,14 +198,32 @@
 
     <h2>Configuration</h2>
     <p>
-      <label><input type="radio" name="config-mode" id="mode-toml" value="toml" /> TOML</label>
+      <label><input type="radio" name="config-mode" id="mode-code" value="code" /> Code</label>
       <label><input type="radio" name="config-mode" id="mode-visual" value="visual" checked /> Visual</label>
     </p>
-    <p>
-      Configure Ruff below, either as raw <code>pyproject.toml</code> text or via
-      the form. Used automatically whenever you click Check.
-    </p>
-    <div id="toml-container"></div>
+    <div id="code-container">
+      <p>
+        <strong>Base config</strong> (<code>pyproject.toml</code>-style) and
+        <strong>overrides</strong> (CLI flags) combine into one effective config, the same way
+        real Ruff layers a checked-in <code>pyproject.toml</code> with ad-hoc flags on a given
+        run — the CLI box always wins on a conflict. Used automatically whenever you click Check.
+      </p>
+      <h3>Base config (pyproject.toml-style)</h3>
+      <div id="toml-container"></div>
+      <h3>Overrides (CLI flags)</h3>
+      <p>
+        Native flags: <code>--select --ignore --extend-select --fixable --unfixable
+        --extend-fixable --target-version --preview --fix --unsafe-fixes</code>. Anything else
+        Ruff supports — e.g. <code>--line-length</code> isn't a real flag at all, only
+        <code>--config "line-length=100"</code> is — goes through
+        <code>--config "&lt;path&gt;=&lt;toml-value&gt;"</code>, repeatable. Real Ruff flags with
+        no meaning here (no filesystem: <code>--watch</code>, <code>--output-file</code>, …) are
+        accepted and simply ignored — see the notice below if any are in play.
+      </p>
+      <div id="cli-container"></div>
+      <div id="cli-ignored-notice"></div>
+      <button id="fill-from-visual-button">Fill from Visual</button>
+    </div>
     <div id="visual-container">
       <h3>General</h3>
       <div id="tier1-container"></div>
@@ -210,8 +246,8 @@
     <div id="diff-view"></div>
 
     <p><em>
-      Phase 7: Visual mode's rule selection is now available. Still missing:
-      plugin settings, CLI mode.
+      Phase 8: the Code facet (TOML base config + CLI override flags) is now available. Still
+      missing: Visual mode's plugin settings (Tier 4).
     </em></p>
 
     <script type="module" src="/src/main.ts"></script>

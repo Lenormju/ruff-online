@@ -1,16 +1,19 @@
 import type { Mode, VisualOptions } from "../config/options";
 
 /**
- * `toml` and `visual` are both always present regardless of the active
- * `mode` — each mode's config is a snapshot only updated by an explicit
- * mode-switch conversion (never live-derived from the other), so the
- * inactive mode's last snapshot must still round-trip through the URL.
+ * `toml`, `cli`, and `visual` are all always present regardless of the
+ * active `mode`. `toml`/`cli` are Code's own two complementary text boxes
+ * (base config + override flags, merged at Check/Format time, never synced
+ * with each other) and both persist independently of whether `mode` is
+ * currently `"code"` or `"visual"`; `visual`'s snapshot is only updated by
+ * an explicit Code→Visual switch or the "Fill from Visual" button.
  */
 export interface AppState {
   version: string;
   mode: Mode;
   code: string;
   toml: string;
+  cli: string;
   visual: VisualOptions;
 }
 
@@ -49,9 +52,10 @@ function isAppState(value: unknown): value is AppState {
   const record = value as Record<string, unknown>;
   return (
     typeof record.version === "string" &&
-    (record.mode === "toml" || record.mode === "visual") &&
+    (record.mode === "code" || record.mode === "visual") &&
     typeof record.code === "string" &&
     typeof record.toml === "string" &&
+    typeof record.cli === "string" &&
     typeof record.visual === "object" &&
     record.visual !== null
   );

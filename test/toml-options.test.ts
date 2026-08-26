@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { tomlToOptions } from "../src/config/toml-options";
+import { ruffOptionsToTomlText, tomlToOptions } from "../src/config/toml-options";
 
 describe("tomlToOptions", () => {
   test("extracts a scalar option from a [tool.ruff] table", () => {
@@ -89,5 +89,17 @@ describe("tomlToOptions", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a parse failure");
     expect(result.message).toMatch(/line-length/);
+  });
+});
+
+describe("ruffOptionsToTomlText", () => {
+  test("wraps options in a [tool.ruff] table and round-trips through tomlToOptions", () => {
+    const options = { "line-length": 20, lint: { select: ["E", "F"] } };
+    const text = ruffOptionsToTomlText(options);
+    expect(tomlToOptions(text)).toEqual({ ok: true, hasRuffTable: true, options });
+  });
+
+  test("empty options still produce a parseable [tool.ruff] table", () => {
+    expect(tomlToOptions(ruffOptionsToTomlText({}))).toEqual({ ok: true, hasRuffTable: true, options: {} });
   });
 });

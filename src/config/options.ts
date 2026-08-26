@@ -1,10 +1,15 @@
-import { stringify } from "smol-toml";
 import { toSelectIgnore, type CategorySelected, type RuleOverrides } from "./rule-reconciliation";
 import type { RulesIndex } from "./rules-data";
 import { lintToVisual, type LintSelectors } from "./toml-to-visual";
-import type { RuffOptions } from "./toml-options";
+import { ruffOptionsToTomlText, type RuffOptions } from "./toml-options";
 
-export type Mode = "toml" | "visual";
+/**
+ * "Code" bundles TOML (base config) + CLI (override flags) — two
+ * complementary layers of one merged `RuffOptions`, not alternate views of
+ * the same value, so there is no lossy-conversion concept between them.
+ * "Visual" is the structured-form facet.
+ */
+export type Mode = "code" | "visual";
 
 /** Visual mode's global (Tier 1) fields — a subset of Ruff's top-level `Options`. */
 export interface Tier1Options {
@@ -240,5 +245,5 @@ export function ruffOptionsToVisualOptions(
  * together can't produce anything TOML can't express.
  */
 export function visualOptionsToTomlText(visual: VisualOptions, rulesIndex: RulesIndex | null): string {
-  return stringify({ tool: { ruff: visualOptionsToRuffOptions(visual, rulesIndex) } });
+  return ruffOptionsToTomlText(visualOptionsToRuffOptions(visual, rulesIndex));
 }

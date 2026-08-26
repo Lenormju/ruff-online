@@ -4,7 +4,15 @@ import { createUrlSync, loadInitialState } from "../src/state/app-state";
 import { encodeState, type AppState } from "../src/state/url-state";
 
 function baseState(overrides: Partial<AppState> = {}): AppState {
-  return { version: "0.16.4", mode: "toml", code: "import os\n", toml: "[tool.ruff]\n", visual: EMPTY_VISUAL_OPTIONS, ...overrides };
+  return {
+    version: "0.16.4",
+    mode: "code",
+    code: "import os\n",
+    toml: "[tool.ruff]\n",
+    cli: "ruff check\n",
+    visual: EMPTY_VISUAL_OPTIONS,
+    ...overrides,
+  };
 }
 
 describe("loadInitialState", () => {

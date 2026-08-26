@@ -1,4 +1,4 @@
-import { parse, TomlError } from "smol-toml";
+import { parse, stringify, TomlError } from "smol-toml";
 
 /**
  * Ruff's `Options` — the value handed verbatim to `new Workspace(options, ...)`.
@@ -118,4 +118,9 @@ export function tomlToOptions(text: string): TomlOptionsResult {
   }
 
   return { ok: true, options, hasRuffTable: true };
+}
+
+/** Reverses `tomlToOptions`'s extraction: wraps flattened `Options` back into `[tool.ruff]` TOML text. */
+export function ruffOptionsToTomlText(options: RuffOptions): string {
+  return stringify({ tool: { ruff: options } });
 }

@@ -3,12 +3,13 @@ import { EMPTY_VISUAL_OPTIONS } from "../src/config/options";
 import { decodeState, encodeState, SOFT_CAP_CHARS, type AppState } from "../src/state/url-state";
 
 describe("encodeState / decodeState", () => {
-  test("round-trips version, mode, code, toml, and visual exactly", async () => {
+  test("round-trips version, mode, code, toml, cli, and visual exactly", async () => {
     const state: AppState = {
       version: "0.16.4",
-      mode: "toml",
+      mode: "code",
       code: "import os\n\ndef f(x):\n    return x+1\n",
       toml: '[tool.ruff]\nline-length = 100\nlint.select = ["E", "F"]\n',
+      cli: "ruff check --preview\n",
       visual: EMPTY_VISUAL_OPTIONS,
     };
     const encoded = await encodeState(state);
@@ -22,6 +23,7 @@ describe("encodeState / decodeState", () => {
       mode: "visual",
       code: "x = 1\n",
       toml: "[tool.ruff]\n",
+      cli: "ruff check\n",
       visual: { tier1: { lineLength: 100, targetVersion: "py311" }, tier3: { quoteStyle: "single" } },
     };
     expect(await decodeState(await encodeState(state))).toEqual(state);
@@ -30,9 +32,10 @@ describe("encodeState / decodeState", () => {
   test("round-trips unicode content", async () => {
     const state: AppState = {
       version: "0.16.4",
-      mode: "toml",
+      mode: "code",
       code: "# héllo wörld 你好\n",
       toml: "[tool.ruff]\n",
+      cli: "ruff check\n",
       visual: EMPTY_VISUAL_OPTIONS,
     };
     const encoded = await encodeState(state);
@@ -42,9 +45,10 @@ describe("encodeState / decodeState", () => {
   test("produces a URL-fragment-safe string (no + / = padding)", async () => {
     const encoded = await encodeState({
       version: "0.16.4",
-      mode: "toml",
+      mode: "code",
       code: "x = 1\n",
       toml: "[tool.ruff]\n",
+      cli: "ruff check\n",
       visual: EMPTY_VISUAL_OPTIONS,
     });
     expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
@@ -57,9 +61,10 @@ describe("encodeState / decodeState", () => {
   test("returns null when decompressed JSON doesn't match the AppState shape", async () => {
     const encoded = await encodeState({
       version: "0.16.4",
-      mode: "toml",
+      mode: "code",
       code: "x",
       toml: "",
+      cli: "",
       visual: EMPTY_VISUAL_OPTIONS,
     });
     // Corrupting a valid encoding still exercises the "parses but wrong shape"
@@ -70,10 +75,22 @@ describe("encodeState / decodeState", () => {
     expect(await decodeState(encoded)).not.toBeNull();
   });
 
-  test("returns null when mode is neither 'toml' nor 'visual'", async () => {
+  test("returns null when mode is neither 'code' nor 'visual'", async () => {
     const bogus = await encodeArbitraryJson({
       version: "0.16.4",
-      mode: "cli",
+      mode: "toml",
+      code: "",
+      toml: "",
+      cli: "",
+      visual: EMPTY_VISUAL_OPTIONS,
+    });
+    expect(await decodeState(bogus)).toBeNull();
+  });
+
+  test("returns null when cli is missing", async () => {
+    const bogus = await encodeArbitraryJson({
+      version: "0.16.4",
+      mode: "code",
       code: "",
       toml: "",
       visual: EMPTY_VISUAL_OPTIONS,
@@ -82,7 +99,7 @@ describe("encodeState / decodeState", () => {
   });
 
   test("returns null when visual is missing", async () => {
-    const bogus = await encodeArbitraryJson({ version: "0.16.4", mode: "toml", code: "", toml: "" });
+    const bogus = await encodeArbitraryJson({ version: "0.16.4", mode: "code", code: "", toml: "", cli: "" });
     expect(await decodeState(bogus)).toBeNull();
   });
 
@@ -94,9 +111,10 @@ describe("encodeState / decodeState", () => {
     const random = Buffer.from(randomBytes).toString("base64");
     const encoded = await encodeState({
       version: "0.16.4",
-      mode: "toml",
+      mode: "code",
       code: random,
       toml: "",
+      cli: "",
       visual: EMPTY_VISUAL_OPTIONS,
     });
     expect(encoded.length).toBeGreaterThan(SOFT_CAP_CHARS);
@@ -105,9 +123,10 @@ describe("encodeState / decodeState", () => {
   test("stays comfortably under the soft cap for a typical small snippet", async () => {
     const encoded = await encodeState({
       version: "0.16.4",
-      mode: "toml",
+      mode: "code",
       code: "import os\n",
       toml: "[tool.ruff]\n",
+      cli: "ruff check\n",
       visual: EMPTY_VISUAL_OPTIONS,
     });
     expect(encoded.length).toBeLessThan(SOFT_CAP_CHARS);

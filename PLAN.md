@@ -31,15 +31,22 @@ starting from the smallest possible end-to-end slice.
   PR checkpoint (the smoke test is the quality gate). A version that fails
   the smoke test is simply never added. Retention: keep all versions
   forever, no pruning.
-- **Input modes — build order changed from the original design pass**:
-  **Raw TOML ships first**, since Ruff's `Options` mirror `[tool.ruff]`
-  ~1:1 and a TOML textarea + parser gives full config coverage almost
-  immediately. **Visual (tiered form) mode ships later**, layered on top of
-  the same underlying `Options` object, built incrementally (Tier 1+3, then
-  Tier 2 rule selection, then Tier 4 plugin fine-tuning). CLI-flags mode
-  ships last, as a thin third mode. Modes are **mutually exclusive**, never
-  live-synced — switching modes does a one-time explicit conversion, with a
-  warning before any lossy switch.
+- **Input modes — build order changed from the original design pass, and the
+  mode model itself was revised in Phase 8**: **Raw TOML ships first**, since
+  Ruff's `Options` mirror `[tool.ruff]` ~1:1 and a TOML textarea + parser
+  gives full config coverage almost immediately. **Visual (tiered form) mode
+  ships later**, layered on top of the same underlying `Options` object,
+  built incrementally (Tier 1+3, then Tier 2 rule selection, then Tier 4
+  plugin fine-tuning). As of Phase 8, there are two top-level facets, not
+  three parallel modes: **Code** (TOML base config + CLI override flags,
+  merged — see Phase 8) and **Visual**. Both facets are `mode` values
+  (`"code" | "visual"`); TOML and CLI are not alternate views switched
+  between, but complementary layers combined at Check/Format time — see
+  Phase 8's section for the full rationale. The Code/Visual split is still
+  **mutually exclusive** and never live-synced — switching between them does
+  a one-time explicit conversion (Code→Visual can warn before a lossy
+  discard; Visual→Code is an explicit "Fill from Visual" action, never
+  automatic and never lossy).
 - **Hard UX rule throughout**: never change user input without consent.
   Format never auto-replaces (diff + explicit Apply button). Shareable-URL
   state is only ever applied on initial page load, never on a later
@@ -483,21 +490,121 @@ the meantime, never sent to Ruff), not addressed now.
 
 ---
 
-## Phase 8 — CLI Flags Mode
+## Phase 8 — Code facet: TOML base config + CLI override flags, merged
 
-**Adds**: `src/config/cli-flags.ts` — hand-rolled parser for a documented
-subset only: `--select`, `--ignore`, `--extend-select`, `--line-length`,
+**Status: done**, built as a substantial redesign from the original draft
+below (kept for history) after the user reframed the goal mid-planning: the
+app's one real interface is `RuffOptions`, offered via two facets — **Code**
+(this phase) and **Visual**. Both should independently be as close to a full
+bijection with `RuffOptions` as possible; Code gets there now, Visual's
+remaining gap (Tier 4, `fixable`/`unfixable`) is accepted but must always be
+documented and warned-about before anything is silently discarded.
+
+**Original draft (superseded)**: a thin third mode parsing a small hand-rolled
+subset of flags (`--select`, `--ignore`, `--extend-select`, `--line-length`,
 `--target-version`, `--preview`, `--fixable`, `--unfixable`,
-`--extend-ignore` (cross-check exact flag names against real
-`ruff check --help` before implementing, not assumed). First token
-(`check`/`format`) is cosmetic framing only. Reuses Phase 7's
-`toml-to-visual`-style logic for its own select/ignore parsing.
+`--extend-ignore`). Verifying against real `ruff check --help` (not assumed,
+per this section's own open-risk item) found two of those flags don't exist:
+**`--line-length` isn't a real flag at all** (only `--config
+"line-length=N"`), and **`--extend-ignore` doesn't exist** (only
+`--extend-select`/`--extend-fixable`). That verification pass is what
+triggered the redesign below rather than a small find-and-replace.
 
-**Critical files**: `src/config/cli-flags.ts`, `src/editor/cli-editor.ts`
-(plain styled textarea — no syntax highlighting needed for a flag string).
+**Design — Code = TOML (base) + CLI (overrides), merged**: mirrors how real
+Ruff actually behaves — a checked-in `pyproject.toml` plus ad-hoc CLI flags
+for one run, where CLI/`--config` settings "always take precedence over all
+configuration files" (Ruff's own `--config` help text, confirmed directly).
+Both boxes are always shown together, independently editable, never synced
+or converted into each other — there is no lossy-conversion concept between
+TOML and CLI at all. `effectiveOptions = deepMergeOptions(parse(toml),
+parse(cli))` (`src/config/cli-flags.ts`): plain-object/table values merge
+key-by-key (so TOML's `lint.select` and CLI's `lint.extend-select` both
+survive as siblings), arrays/scalars are atomic replacements by the
+override — this alone reproduces Ruff's real `select`-replaces-vs-
+`extend-select`-adds semantics, since that's just two different keys and
+`rule-reconciliation.ts` already interprets their interaction downstream.
 
-**Verification**: unit tests per supported flag + a combination; an
-unsupported flag shows a clear message rather than silently no-op'ing.
+**Full `RuffOptions` coverage for CLI**: native ergonomic flags (`--select`,
+`--ignore`, `--extend-select`, `--fixable`, `--unfixable`,
+`--extend-fixable`, `--target-version`, `--preview`, `--fix`,
+`--unsafe-fixes`) plus a generic `--config "<dotted.path>=<toml-value>"`
+escape hatch — a real, repeatable Ruff flag, confirmed empirically to accept
+genuine TOML value syntax at arbitrary depth (a top-level scalar, a nested
+plugin field `lint.pydocstyle.convention="google"`, an inline table; bare
+unquoted strings are rejected, numbers/booleans are fine). This makes CLI a
+full, lossless serialization of `RuffOptions`, same as TOML. `smol-toml`'s
+`stringify` only emits block-table syntax for nested tables, not inline, so
+`optionsToCliFlags` has its own small hand-rolled inline-TOML-value writer
+(`tomlValueLiteral`) for the generic-fallback direction; parsing needed no
+such thing (`smol-toml.parse` already understands inline tables/arrays).
+Real Ruff users paste **shell-quoted** command lines (`--config
+"lint.select=[\"E\", \"F\"]"`), so `shellTokenize` does real quote-aware
+tokenization, not naive whitespace-splitting.
+
+**Permissive by design (explicit user decision)**: any *real* Ruff CLI flag
+with no meaning in a filesystem-less browser tool (`--watch`,
+`--output-file`, `--cache-dir`, positional file/dir args, etc.) is accepted,
+not a parse error — arity-correct so tokenization stays right — but **not
+silent**: `#cli-ignored-notice` shows a live, amber notice naming exactly
+which recognized flags/arguments were ignored, updated on every CLI-box
+edit. Only a flag that isn't a real Ruff flag at all (typo/invented) is a
+hard parse error, pointing the user at `--config` as the general escape
+hatch. `--per-file-ignores`/`--extend-per-file-ignores` are real
+`RuffOptions` fields but use a non-TOML `pattern:codes` mini-syntax this
+parser doesn't special-case — also reported as ignored, still reachable via
+`--config "lint.per-file-ignores={...}"`.
+
+**A real correctness edge case, handled**: `optionsToCliFlags`'s generic
+`--config` fallback recurses into nested tables to emit one flag per leaf
+(e.g. `--config "lint.pydocstyle.convention=..."`) — but only when every key
+at that level is a safe bare identifier. A table with a literal-dot key (a
+file-pattern key like `"__init__.py"` in `per-file-ignores`) would otherwise
+produce a dotted path indistinguishable from genuine nesting and fail to
+round-trip back through `--config`'s own `path.split(".")`; such a table is
+instead emitted whole, as one opaque inline-TOML-value leaf.
+
+**Visual ⇄ Code, and why there's no live sync**: Code→Visual parses TOML,
+parses CLI, merges, then runs the merged `RuffOptions` through the existing
+`ruffOptionsToVisualOptions`/`optionsToVisualWarning` (renamed from
+`tomlToVisualWarning` — the source was always a generic `RuffOptions`, never
+TOML-specific) exactly like the old TOML→Visual switch, warning before
+discarding anything Visual can't yet represent (Tier 4, `fixable`/
+`unfixable`). **Visual→Code is deliberately not automatic** — an earlier
+version of this design converted-and-overwrote on every mode-radio click,
+but that risked silently clobbering whatever WIP text the user already had
+in the TOML/CLI boxes even though the *resulting* `RuffOptions` is never
+lossy in that direction. Clicking the "Code" radio from Visual is now a pure
+visibility change (editors untouched); populating Code from Visual is a
+separate, explicit **"Fill from Visual"** button that writes the full state
+into the TOML box (`ruffOptionsToTomlText`) and resets the CLI box to empty
+— deliberately, so the merge stays unambiguous and nothing stale in CLI can
+silently combine with the fresh TOML. Never warns (the explicit click is the
+consent step) since Visual's coverage is always a subset of what Code can
+express.
+
+**Critical files**: `src/config/cli-flags.ts` (`shellTokenize`,
+`cliFlagsToOptions`, `optionsToCliFlags`, `deepMergeOptions`, `deepSet`),
+`src/editor/cli-editor.ts` (plain CodeMirror, no language mode — just a flag
+string, no syntax to highlight), `src/config/toml-options.ts`
+(`ruffOptionsToTomlText`, the TOML-serialization half of the same pivot),
+`src/ui/mode-switch.ts` (`optionsToVisualWarning`).
+
+**Verification**: `pnpm test` (179/179), `tsc -b`, `pnpm build`, and a real
+headless-Chromium pass confirming: TOML-only Check/Format unaffected; TOML
+`select=["F"]` + CLI `--extend-select E501` firing both `F401` and `E501`
+(sibling-key merge); CLI `--select E501` wholesale-replacing TOML's
+`select=["F"]` (only `E501` fires, `F401` doesn't — override-wins
+precedence, matching real Ruff); a `--config format.quote-style` example
+changing Format's diff; an unknown flag showing the amber parse-error
+banner; inert flags (`--watch`, a positional `src/`) parsing successfully
+with the live ignored-flags notice listing both, Check succeeding (not
+blocked); a Code→Visual switch with an unmodeled TOML key showing the
+discard-warning dialog, cancel reverting cleanly; toggling Code→Visual→Code
+leaving a hand-typed TOML marker completely untouched; "Fill from Visual"
+correctly resetting CLI to its default and populating TOML with Visual's
+full state (including Tier 2 rule selection), never prompting a dialog;
+Copy-link round-tripping `mode` plus both TOML/CLI text buffers into a fresh
+browser context.
 
 ---
 
@@ -507,8 +614,12 @@ unsupported flag shows a clear message rather than silently no-op'ing.
 pylint, flake8-pytest-style, etc., ~130 fields across ~25 namespaces) only
 renders once its Tier 2 category has at least one rule enabled. Build
 incrementally by plugin, each as its own verified sub-step, not all at
-once. `Options` schema and TOML/CLI conversions extend to cover these
-fields (CLI mode's documented subset likely doesn't need to grow).
+once. `Options` schema extends to cover these fields in
+`ruffOptionsToVisualOptions`/`visualOptionsToRuffOptions` — this is what
+closes Visual's remaining gap with Code (Phase 8 already gives Code full
+`RuffOptions` coverage via TOML + CLI's native flags/`--config` escape
+hatch, so no CLI-side work is needed here; Phase 9 is purely about Visual
+catching up, not about extending the Code facet).
 
 **Critical files**: `src/config/options.ts` (extended), one file per plugin
 under `src/ui/tier4-panels/`, or a schema-driven generic form if field
@@ -591,7 +702,7 @@ and the current Ruff version.
 | 5 | Shareable URL state | Visual/CLI modes |
 | 6 | Visual Tier 1+3 (+ mode-switch machinery) | rule selection, plugins, CLI mode |
 | 7 | Visual Tier 2 (rule reconciliation) | plugins, CLI mode |
-| 8 | CLI flags mode | plugins, squiggles |
+| 8 | Code facet (TOML base + CLI overrides, merged, full RuffOptions coverage) | Visual's Tier 4/fixable-unfixable gap, squiggles |
 | 9 | Visual Tier 4 (plugins) | squiggles |
 | 10 | Inline squiggles | (feature-complete per current spec) |
 | 11 | README + in-app help notice | — |
@@ -609,9 +720,10 @@ and the current Ruff version.
 3. **Deployment mechanism** — official `actions/upload-pages-artifact` +
    `actions/deploy-pages` (OIDC, no PAT/secrets) over any `gh-pages`-branch
    action.
-4. **Exact CLI flag names** (Phase 8) — verify against real
-   `ruff check --help` output before implementing, don't assume the
-   drafted list is exact.
+4. **Exact CLI flag names** (Phase 8) — **resolved**: verified against real
+   `ruff check --help` output, not assumed. Two of the originally-drafted
+   flags (`--line-length`, `--extend-ignore`) turned out not to exist; see
+   Phase 8's section for the full write-up and the resulting redesign.
 5. **"Stable-only" determination** (Phase 2) — use the Releases API's
    `prerelease`/`draft` booleans as the authoritative signal; verify Ruff's
    actual tag format first, don't pattern-match tag strings blind.
