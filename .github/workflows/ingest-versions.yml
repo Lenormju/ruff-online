@@ -36,17 +36,20 @@ jobs:
           set -e
           echo "New versions: $NEW_VERSIONS"
           ingested=()
+          failed=0
           for version in $(echo "$NEW_VERSIONS" | jq -r '.[]'); do
             echo "::group::Ingesting Ruff $version"
 
             if ! node scripts/gen-rules-json.mjs "$version"; then
-              echo "::warning::Failed to generate rules.json for Ruff $version, skipping"
+              echo "::error::Failed to generate rules.json for Ruff $version"
+              failed=1
               echo "::endgroup::"
               continue
             fi
 
             if ! node scripts/smoke-test.mjs "$version"; then
-              echo "::warning::Smoke test failed for Ruff $version, skipping"
+              echo "::error::Smoke test failed for Ruff $version"
+              failed=1
               echo "::endgroup::"
               continue
             fi
@@ -71,6 +74,7 @@ jobs:
           done
 
           echo "ingested=${ingested[*]}" >> "$GITHUB_OUTPUT"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
 
       - name: Commit and push
         env:
@@ -85,3 +89,9 @@ jobs:
             git commit -m "chore: ingest Ruff ${INGESTED_VERSIONS} (automated)"
             git push
           fi
+
+      - name: Fail if any version could not be ingested
+        if: steps.ingest.outputs.failed == '1'
+        run: |
+          echo "::error::One or more Ruff versions failed to ingest, see annotations above"
+          exit 1
