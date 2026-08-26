@@ -53,9 +53,18 @@
         font-family: ui-monospace, monospace;
         font-size: 0.85rem;
       }
-      #version-input {
-        width: 15rem;
+      #version-select + .ts-wrapper {
+        /* Wide enough that the selected-version label and the search input can share one
+           line even while focused — narrower and the flex layout wraps the input onto a
+           second line, growing the control's height and shifting the buttons after it. */
+        width: 23rem;
         margin-right: 0.5rem;
+        vertical-align: middle;
+      }
+      /* While searching, hide the still-selected version's label so it doesn't visually
+         run into the typed search text (single-select mode keeps both on the same line). */
+      #version-select + .ts-wrapper.dropdown-active .item {
+        display: none;
       }
       #code-container,
       #visual-container {
@@ -194,9 +203,8 @@
 
     <div id="editor-container"></div>
     <p>
-      <label for="version-input">Ruff version</label>
-      <input id="version-input" list="version-datalist" autocomplete="off" placeholder="Search version…" />
-      <datalist id="version-datalist"></datalist>
+      <label for="version-select">Ruff version</label>
+      <select id="version-select"></select>
       <button id="check-button">Check</button>
       <button id="format-button">Format</button>
       <button id="apply-button">Apply</button>

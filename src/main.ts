@@ -1,3 +1,5 @@
+import TomSelect from "tom-select";
+import "tom-select/dist/css/tom-select.css";
 import { checkCode, formatCode, SYNTAX_ERROR_CODE } from "./engine/workspace";
 import {
   formatVersionLabel,
@@ -50,8 +52,7 @@ const copyLinkButton = document.querySelector<HTMLButtonElement>("#copy-link-but
 const resetButton = document.querySelector<HTMLButtonElement>("#reset-button")!;
 const dumpStateButton = document.querySelector<HTMLButtonElement>("#dump-state-button")!;
 const debugOutput = document.querySelector<HTMLPreElement>("#debug-output")!;
-const versionInput = document.querySelector<HTMLInputElement>("#version-input")!;
-const versionDatalist = document.querySelector<HTMLDataListElement>("#version-datalist")!;
+const versionSelectEl = document.querySelector<HTMLSelectElement>("#version-select")!;
 const configStatus = document.querySelector<HTMLDivElement>("#config-status")!;
 const resultsList = document.querySelector<HTMLUListElement>("#results")!;
 const errorBanner = document.querySelector<HTMLDivElement>("#error-banner")!;
@@ -101,7 +102,7 @@ const initialState = await loadInitialState(location.hash);
 
 let versions: VersionEntry[] = [];
 let currentEntry: VersionEntry | null = null;
-const labelToEntry = new Map<string, VersionEntry>();
+let versionSelect: TomSelect;
 let pendingFormattedCode: string | null = null;
 let diffBefore: string | null = null;
 let diffAfter: string | null = null;
@@ -218,6 +219,17 @@ function wireStateControl(target: EventTarget, event: string, handler: () => voi
   });
 }
 
+/** Same contract as {@link wireStateControl}, for controls (like TomSelect) that use their own
+ * event emitter instead of implementing `EventTarget`. */
+function wireStateEmitter(subscribe: (fire: () => void) => void, handler: () => void | Promise<void>) {
+  subscribe(() => {
+    void (async () => {
+      await handler();
+      notifyUrlSync();
+    })();
+  });
+}
+
 wireStateControl(modeCodeRadio, "change", () => switchMode("code"));
 wireStateControl(modeVisualRadio, "change", () => switchMode("visual"));
 wireStateControl(fillFromVisualButton, "click", () => fillCodeFromVisual());
@@ -310,27 +322,31 @@ async function initVersions() {
   const preferred = initialState ? versions.find((entry) => entry.version === initialState.version) : undefined;
   const initial = preferred ?? latest;
 
-  labelToEntry.clear();
-  versionDatalist.replaceChildren(
+  versionSelectEl.replaceChildren(
     ...versions.map((entry) => {
-      const label = formatVersionLabel(entry, entry.version === latest.version);
-      labelToEntry.set(label, entry);
       const option = document.createElement("option");
-      option.value = label;
+      option.value = entry.version;
+      option.textContent = formatVersionLabel(entry, entry.version === latest.version);
       return option;
     }),
   );
-  versionInput.value = formatVersionLabel(initial, initial.version === latest.version);
+  // Browsable (scrollable option list) as well as searchable, unlike a plain <input list=...
+  // datalist>, whose popup only appears once the user starts typing.
+  versionSelect = new TomSelect(versionSelectEl, { dropdownParent: "body" });
+  versionSelect.setValue(initial.version, true);
   currentEntry = initial;
   updatePositionEncodingWarning();
   void loadRulesIndexFor(initial);
-}
 
-wireStateControl(versionInput, "change", () => {
-  currentEntry = labelToEntry.get(versionInput.value) ?? null;
-  updatePositionEncodingWarning();
-  if (currentEntry) void loadRulesIndexFor(currentEntry);
-});
+  wireStateEmitter(
+    (fire) => versionSelect.on("change", fire),
+    async () => {
+      currentEntry = versions.find((entry) => entry.version === versionSelect.getValue()) ?? null;
+      updatePositionEncodingWarning();
+      if (currentEntry) await loadRulesIndexFor(currentEntry);
+    },
+  );
+}
 
 void initVersions();
 
@@ -523,7 +539,7 @@ async function resetAll() {
 
   const latest = await getLatestVersion();
   currentEntry = latest;
-  versionInput.value = formatVersionLabel(latest, true);
+  versionSelect.setValue(latest.version, true);
   updatePositionEncodingWarning();
   void loadRulesIndexFor(latest);
 
