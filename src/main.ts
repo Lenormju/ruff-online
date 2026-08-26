@@ -1,8 +1,19 @@
 import { checkCode, formatCode, SYNTAX_ERROR_CODE } from "./engine/workspace";
 import { getLatestVersion, getVersions, type VersionEntry } from "./engine/versions";
-import { createPythonEditor, replaceContent } from "./editor/python-editor";
+import { createPythonEditor } from "./editor/python-editor";
 import { createTomlEditor } from "./editor/toml-editor";
-import { tomlToOptions } from "./config/toml-options";
+import { replaceContent } from "./editor/common";
+import { tomlToOptions, type TomlOptionsResult } from "./config/toml-options";
+import {
+  EMPTY_VISUAL_OPTIONS,
+  ruffOptionsToVisualOptions,
+  visualOptionsToRuffOptions,
+  visualOptionsToTomlText,
+  type Mode,
+} from "./config/options";
+import { tomlToVisualWarning } from "./ui/mode-switch";
+import { createTier1Panel } from "./ui/tier1-panel";
+import { createTier3Panel } from "./ui/tier3-panel";
 import { formatDiagnostic, renderDiagnostics } from "./ui/diagnostics-panel";
 import { renderDiff } from "./ui/diff-view";
 import { createUrlSync, loadInitialState } from "./state/app-state";
@@ -10,6 +21,11 @@ import type { AppState } from "./state/url-state";
 
 const editorContainer = document.querySelector<HTMLDivElement>("#editor-container")!;
 const tomlContainer = document.querySelector<HTMLDivElement>("#toml-container")!;
+const visualContainer = document.querySelector<HTMLDivElement>("#visual-container")!;
+const tier1Container = document.querySelector<HTMLDivElement>("#tier1-container")!;
+const tier3Container = document.querySelector<HTMLDivElement>("#tier3-container")!;
+const modeTomlRadio = document.querySelector<HTMLInputElement>("#mode-toml")!;
+const modeVisualRadio = document.querySelector<HTMLInputElement>("#mode-visual")!;
 const checkButton = document.querySelector<HTMLButtonElement>("#check-button")!;
 const formatButton = document.querySelector<HTMLButtonElement>("#format-button")!;
 const applyButton = document.querySelector<HTMLButtonElement>("#apply-button")!;
@@ -39,18 +55,42 @@ let diffBefore: string | null = null;
 let diffAfter: string | null = null;
 let diffEditorView: ReturnType<typeof renderDiff> | null = null;
 
+// Which config mode is active — TOML and Visual are never live-synced, only
+// converted into each other on an explicit mode switch (see mode radios
+// below), so both an editor's TOML text and the Visual panels' field values
+// always exist regardless of which one is currently in force.
+let mode: Mode = initialState?.mode ?? "toml";
+
 // Reassigned once `urlSync` exists below; editors are created first since
 // `getCurrentAppState` reads from them, and both directions need each other.
 let notifyUrlSync: () => void = () => {};
 
 const editor = createPythonEditor(editorContainer, initialState?.code ?? defaultCode, () => notifyUrlSync());
 const tomlEditor = createTomlEditor(tomlContainer, initialState?.toml ?? defaultToml, () => notifyUrlSync());
+const tier1Panel = createTier1Panel(tier1Container, initialState?.visual.tier1 ?? EMPTY_VISUAL_OPTIONS.tier1, () => notifyUrlSync());
+const tier3Panel = createTier3Panel(tier3Container, initialState?.visual.tier3 ?? EMPTY_VISUAL_OPTIONS.tier3, () => notifyUrlSync());
+
+function applyModeUI() {
+  modeTomlRadio.checked = mode === "toml";
+  modeVisualRadio.checked = mode === "visual";
+  tomlContainer.style.display = mode === "toml" ? "block" : "none";
+  visualContainer.style.display = mode === "visual" ? "block" : "none";
+}
+applyModeUI();
+
+/** The options the active mode currently represents — feeds Check/Format. */
+function currentOptionsResult(): TomlOptionsResult {
+  if (mode === "toml") return tomlToOptions(tomlEditor.state.doc.toString());
+  return { ok: true, options: visualOptionsToRuffOptions({ tier1: tier1Panel.get(), tier3: tier3Panel.get() }), hasRuffTable: true };
+}
 
 function getCurrentAppState(): AppState {
   return {
     version: currentEntry?.version ?? "",
+    mode,
     code: editor.state.doc.toString(),
     toml: tomlEditor.state.doc.toString(),
+    visual: { tier1: tier1Panel.get(), tier3: tier3Panel.get() },
   };
 }
 
@@ -61,6 +101,54 @@ function handleUrlEncoded(hash: string, exceedsSoftCap: boolean) {
 
 const urlSync = createUrlSync(getCurrentAppState, handleUrlEncoded);
 notifyUrlSync = () => urlSync.notifyChange();
+
+/** Every native control that affects `AppState` beyond an editor's/panel's own
+ * constructor-time `onChange` must go through this — the deliberate fix for
+ * Phase 5's flagged gap where a raw `addEventListener` could silently forget
+ * the trailing `notifyUrlSync()` call. */
+function wireStateControl(target: EventTarget, event: string, handler: () => void) {
+  target.addEventListener(event, () => {
+    handler();
+    notifyUrlSync();
+  });
+}
+
+wireStateControl(modeTomlRadio, "change", () => switchMode("toml"));
+wireStateControl(modeVisualRadio, "change", () => switchMode("visual"));
+
+function switchMode(target: Mode) {
+  if (target === mode) return;
+
+  if (mode === "toml" && target === "visual") {
+    const result = tomlToOptions(tomlEditor.state.doc.toString());
+    if (!result.ok) {
+      applyModeUI(); // revert the radio to the still-active mode
+      showConfigParseError(result.message);
+      return;
+    }
+    const warning = tomlToVisualWarning(result.options);
+    if (warning !== null && !confirm(`${warning}\n\nContinue?`)) {
+      applyModeUI();
+      return;
+    }
+    clearOutput();
+    clearConfigStatus();
+    clearDiff();
+    const { visual } = ruffOptionsToVisualOptions(result.options);
+    tier1Panel.set(visual.tier1);
+    tier3Panel.set(visual.tier3);
+  } else {
+    // Visual -> TOML is never lossy: Tier 1+3 alone can't hold anything TOML can't express.
+    clearOutput();
+    clearConfigStatus();
+    clearDiff();
+    const visual = { tier1: tier1Panel.get(), tier3: tier3Panel.get() };
+    replaceContent(tomlEditor, visualOptionsToTomlText(visual));
+  }
+
+  mode = target;
+  applyModeUI();
+}
 
 async function initVersions() {
   versions = await getVersions();
@@ -80,9 +168,8 @@ async function initVersions() {
   currentEntry = initial;
 }
 
-versionSelect.addEventListener("change", () => {
+wireStateControl(versionSelect, "change", () => {
   currentEntry = versions.find((entry) => entry.version === versionSelect.value) ?? null;
-  notifyUrlSync();
 });
 
 void initVersions();
@@ -144,7 +231,7 @@ async function check() {
   clearOutput();
   clearConfigStatus();
 
-  const result = tomlToOptions(tomlEditor.state.doc.toString());
+  const result = currentOptionsResult();
   if (!result.ok) {
     // Config never reached Ruff — do not run, and leave everything else as
     // just cleared above.
@@ -178,7 +265,7 @@ async function format() {
   clearConfigStatus();
   clearDiff();
 
-  const result = tomlToOptions(tomlEditor.state.doc.toString());
+  const result = currentOptionsResult();
   if (!result.ok) {
     showConfigParseError(result.message);
     return;

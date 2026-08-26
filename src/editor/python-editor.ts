@@ -20,10 +20,3 @@ export function jumpToOffset(view: EditorView, offset: number): void {
   });
   view.focus();
 }
-
-/** Only ever called from an explicit user action (the Apply button) — never automatically. */
-export function replaceContent(view: EditorView, content: string): void {
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: content },
-  });
-}

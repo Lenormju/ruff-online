@@ -1,7 +1,17 @@
+import type { Mode, VisualOptions } from "../config/options";
+
+/**
+ * `toml` and `visual` are both always present regardless of the active
+ * `mode` — each mode's config is a snapshot only updated by an explicit
+ * mode-switch conversion (never live-derived from the other), so the
+ * inactive mode's last snapshot must still round-trip through the URL.
+ */
 export interface AppState {
   version: string;
+  mode: Mode;
   code: string;
   toml: string;
+  visual: VisualOptions;
 }
 
 /** Soft cap on the shareable URL's fragment length; warn, don't block — no backend fallback. */
@@ -38,7 +48,12 @@ function isAppState(value: unknown): value is AppState {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
   return (
-    typeof record.version === "string" && typeof record.code === "string" && typeof record.toml === "string"
+    typeof record.version === "string" &&
+    (record.mode === "toml" || record.mode === "visual") &&
+    typeof record.code === "string" &&
+    typeof record.toml === "string" &&
+    typeof record.visual === "object" &&
+    record.visual !== null
   );
 }
 

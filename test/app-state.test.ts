@@ -1,6 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
+import { EMPTY_VISUAL_OPTIONS } from "../src/config/options";
 import { createUrlSync, loadInitialState } from "../src/state/app-state";
 import { encodeState, type AppState } from "../src/state/url-state";
+
+function baseState(overrides: Partial<AppState> = {}): AppState {
+  return { version: "0.16.4", mode: "toml", code: "import os\n", toml: "[tool.ruff]\n", visual: EMPTY_VISUAL_OPTIONS, ...overrides };
+}
 
 describe("loadInitialState", () => {
   test("returns null for an empty hash (no state in the URL)", async () => {
@@ -12,7 +17,7 @@ describe("loadInitialState", () => {
   });
 
   test("decodes a state encoded with or without the leading '#'", async () => {
-    const state: AppState = { version: "0.16.4", code: "import os\n", toml: "[tool.ruff]\n" };
+    const state = baseState();
     const encoded = await encodeState(state);
     expect(await loadInitialState("#" + encoded)).toEqual(state);
     expect(await loadInitialState(encoded)).toEqual(state);
@@ -32,7 +37,7 @@ describe("createUrlSync", () => {
   // which doesn't play well with fake timers (they never resolve).
 
   test("debounces rapid notifyChange calls into a single write", async () => {
-    const state: AppState = { version: "0.16.4", code: "x = 1\n", toml: "[tool.ruff]\n" };
+    const state = baseState({ code: "x = 1\n" });
     const onEncoded = vi.fn();
     const sync = createUrlSync(() => state, onEncoded, 60);
 
@@ -52,12 +57,12 @@ describe("createUrlSync", () => {
   });
 
   test("reflects the latest state at fire time, not the state when first scheduled", async () => {
-    let current: AppState = { version: "0.16.4", code: "a", toml: "" };
+    let current = baseState({ code: "a", toml: "" });
     const onEncoded = vi.fn();
     const sync = createUrlSync(() => current, onEncoded, 40);
 
     sync.notifyChange();
-    current = { version: "0.16.4", code: "b", toml: "" };
+    current = baseState({ code: "b", toml: "" });
     await sleep(100);
 
     expect(onEncoded).toHaveBeenCalledTimes(1);
@@ -69,7 +74,7 @@ describe("createUrlSync", () => {
   test("flags encodings over the soft cap via the same check as encodeState", async () => {
     const randomBytes = new Uint8Array(6000);
     crypto.getRandomValues(randomBytes);
-    const state: AppState = { version: "0.16.4", code: Buffer.from(randomBytes).toString("base64"), toml: "" };
+    const state = baseState({ code: Buffer.from(randomBytes).toString("base64"), toml: "" });
     const onEncoded = vi.fn();
     const sync = createUrlSync(() => state, onEncoded, 40);
 
@@ -82,7 +87,7 @@ describe("createUrlSync", () => {
   });
 
   test("flush() encodes and calls back immediately, without waiting for the debounce delay", async () => {
-    const state: AppState = { version: "0.16.4", code: "x = 1\n", toml: "" };
+    const state = baseState({ code: "x = 1\n", toml: "" });
     const onEncoded = vi.fn();
     const sync = createUrlSync(() => state, onEncoded, 10_000);
 
@@ -95,7 +100,7 @@ describe("createUrlSync", () => {
   });
 
   test("flush() cancels a pending debounced call, so it doesn't also fire later", async () => {
-    const state: AppState = { version: "0.16.4", code: "x = 1\n", toml: "" };
+    const state = baseState({ code: "x = 1\n", toml: "" });
     const onEncoded = vi.fn();
     const sync = createUrlSync(() => state, onEncoded, 50);
 
@@ -107,12 +112,12 @@ describe("createUrlSync", () => {
   });
 
   test("flush() reflects the latest state, not a stale pending one", async () => {
-    let current: AppState = { version: "0.16.4", code: "a", toml: "" };
+    let current = baseState({ code: "a", toml: "" });
     const onEncoded = vi.fn();
     const sync = createUrlSync(() => current, onEncoded, 10_000);
 
     sync.notifyChange();
-    current = { version: "0.16.4", code: "b", toml: "" };
+    current = baseState({ code: "b", toml: "" });
     await sync.flush();
 
     const [hash] = onEncoded.mock.calls[0]!;

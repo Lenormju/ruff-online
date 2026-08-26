@@ -288,6 +288,35 @@ confirm the field updates. Trigger a lossy switch (once Tier 2/4 fields
 exist in TOML but not yet in Visual) and confirm the warning appears rather
 than silent data loss.
 
+**Status: done.** `src/config/options.ts` (`visualOptionsToRuffOptions`/
+`ruffOptionsToVisualOptions`/`visualOptionsToTomlText`, TDD'd) holds the
+Tier 1+3 field maps, confirmed against Ruff's real `ruff.schema.json` rather
+than guessed. `src/ui/mode-switch.ts` exposes the pure
+`tomlToVisualWarning` (also TDD'd); the actual `confirm()` dialog and DOM
+writes live in `main.ts`'s `switchMode`, next to `check()`/`format()`.
+`src/ui/tier1-panel.ts`/`tier3-panel.ts` are DOM-only (untested, same as
+`diff-view.ts`'s render half — no jsdom in this repo). Two mutually
+exclusive radio inputs, not a `<select>`, per the "mutually exclusive"
+wording above. `AppState` (`src/state/url-state.ts`) gained `mode` and
+`visual` fields — **a breaking change to the URL format**, accepted
+deliberately since the page still says "missing" for Visual mode until
+now and there are no real shared links to preserve; both `toml` and
+`visual` are always present regardless of active mode, since each mode's
+data is a snapshot only updated by an explicit switch, never derived live
+from the other. Also closes the Phase 5 "known gap" flagged above: a
+`wireStateControl` helper in `main.ts` wraps every native control
+(version `<select>`, the two mode radios) that isn't already funneled
+through a single constructor-time `onChange` the way editors/panels are,
+so a forgotten `notifyUrlSync()` now requires visibly bypassing the shared
+helper rather than silently omitting a trailing call. Verified via
+`pnpm test` (63/63), `tsc -b`, `pnpm build`, and a real headless-Chromium
+pass: Visual→TOML→Visual round-trip of `line_length`/`target_version`/
+`indent_style`/`quote_style`, Format actually reflecting a Visual-set
+`quote_style` in its diff, a lossy TOML→Visual switch triggering the
+`confirm()` warning (accept discards `lint.select`, cancel reverts to TOML
+with the text untouched), and a full Copy-link → fresh-context reload
+restoring Visual mode plus every field.
+
 ---
 
 ## Phase 7 — Visual Mode, Tier 2: Rule Selection
