@@ -262,5 +262,167 @@
     "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.13.2/ruff_wasm.js",
     "rulesPath": "versions/0.13.2/rules.json",
     "releaseDate": "2025-09-25"
+  },
+  {
+    "version": "0.13.1",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.13.1/ruff_wasm.js",
+    "rulesPath": "versions/0.13.1/rules.json",
+    "releaseDate": "2025-09-18"
+  },
+  {
+    "version": "0.13.0",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.13.0/ruff_wasm.js",
+    "rulesPath": "versions/0.13.0/rules.json",
+    "releaseDate": "2025-09-10"
+  },
+  {
+    "version": "0.12.12",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.12/ruff_wasm.js",
+    "rulesPath": "versions/0.12.12/rules.json",
+    "releaseDate": "2025-09-04"
+  },
+  {
+    "version": "0.12.11",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.11/ruff_wasm.js",
+    "rulesPath": "versions/0.12.11/rules.json",
+    "releaseDate": "2025-08-28"
+  },
+  {
+    "version": "0.12.10",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.10/ruff_wasm.js",
+    "rulesPath": "versions/0.12.10/rules.json",
+    "releaseDate": "2025-08-21"
+  },
+  {
+    "version": "0.12.9",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.9/ruff_wasm.js",
+    "rulesPath": "versions/0.12.9/rules.json",
+    "releaseDate": "2025-08-14"
+  },
+  {
+    "version": "0.12.8",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.8/ruff_wasm.js",
+    "rulesPath": "versions/0.12.8/rules.json",
+    "releaseDate": "2025-08-07"
+  },
+  {
+    "version": "0.12.7",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.7/ruff_wasm.js",
+    "rulesPath": "versions/0.12.7/rules.json",
+    "releaseDate": "2025-07-29"
+  },
+  {
+    "version": "0.12.5",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.5/ruff_wasm.js",
+    "rulesPath": "versions/0.12.5/rules.json",
+    "releaseDate": "2025-07-24"
+  },
+  {
+    "version": "0.12.4",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.4/ruff_wasm.js",
+    "rulesPath": "versions/0.12.4/rules.json",
+    "releaseDate": "2025-07-17"
+  },
+  {
+    "version": "0.12.3",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.3/ruff_wasm.js",
+    "rulesPath": "versions/0.12.3/rules.json",
+    "releaseDate": "2025-07-11"
+  },
+  {
+    "version": "0.12.2",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.2/ruff_wasm.js",
+    "rulesPath": "versions/0.12.2/rules.json",
+    "releaseDate": "2025-07-03"
+  },
+  {
+    "version": "0.12.1",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.1/ruff_wasm.js",
+    "rulesPath": "versions/0.12.1/rules.json",
+    "releaseDate": "2025-06-26"
+  },
+  {
+    "version": "0.12.0",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.12.0/ruff_wasm.js",
+    "rulesPath": "versions/0.12.0/rules.json",
+    "releaseDate": "2025-06-17"
+  },
+  {
+    "version": "0.11.13",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.13/ruff_wasm.js",
+    "rulesPath": "versions/0.11.13/rules.json",
+    "releaseDate": "2025-06-05"
+  },
+  {
+    "version": "0.11.12",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.12/ruff_wasm.js",
+    "rulesPath": "versions/0.11.12/rules.json",
+    "releaseDate": "2025-05-29"
+  },
+  {
+    "version": "0.11.11",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.11/ruff_wasm.js",
+    "rulesPath": "versions/0.11.11/rules.json",
+    "releaseDate": "2025-05-22"
+  },
+  {
+    "version": "0.11.10",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.10/ruff_wasm.js",
+    "rulesPath": "versions/0.11.10/rules.json",
+    "releaseDate": "2025-05-15"
+  },
+  {
+    "version": "0.11.9",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.9/ruff_wasm.js",
+    "rulesPath": "versions/0.11.9/rules.json",
+    "releaseDate": "2025-05-09"
+  },
+  {
+    "version": "0.11.8",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.8/ruff_wasm.js",
+    "rulesPath": "versions/0.11.8/rules.json",
+    "releaseDate": "2025-05-01"
+  },
+  {
+    "version": "0.11.7",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.7/ruff_wasm.js",
+    "rulesPath": "versions/0.11.7/rules.json",
+    "releaseDate": "2025-04-24"
+  },
+  {
+    "version": "0.11.6",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.6/ruff_wasm.js",
+    "rulesPath": "versions/0.11.6/rules.json",
+    "releaseDate": "2025-04-17"
+  },
+  {
+    "version": "0.11.5",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.5/ruff_wasm.js",
+    "rulesPath": "versions/0.11.5/rules.json",
+    "releaseDate": "2025-04-10"
+  },
+  {
+    "version": "0.11.4",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.4/ruff_wasm.js",
+    "rulesPath": "versions/0.11.4/rules.json",
+    "releaseDate": "2025-04-04"
+  },
+  {
+    "version": "0.11.3",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.3/ruff_wasm.js",
+    "rulesPath": "versions/0.11.3/rules.json",
+    "releaseDate": "2025-04-03"
+  },
+  {
+    "version": "0.11.2",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.2/ruff_wasm.js",
+    "rulesPath": "versions/0.11.2/rules.json",
+    "releaseDate": "2025-03-21"
+  },
+  {
+    "version": "0.11.1",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.11.1/ruff_wasm.js",
+    "rulesPath": "versions/0.11.1/rules.json",
+    "releaseDate": "2025-03-20"
   }
 ]
