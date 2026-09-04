@@ -430,5 +430,11 @@
     "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.16.5/ruff_wasm.js",
     "rulesPath": "versions/0.16.5/rules.json",
     "releaseDate": "2026-08-27"
+  },
+  {
+    "version": "0.16.6",
+    "wasmUrl": "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.16.6/ruff_wasm.js",
+    "rulesPath": "versions/0.16.6/rules.json",
+    "releaseDate": "2026-09-03"
   }
 ]
